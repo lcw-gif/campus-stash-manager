@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { StatusBadge } from '@/components/StatusBadge';
+import { RepurchaseButton } from '@/components/RepurchaseButton';
 import { PurchaseItem, PurchaseStatus } from '@/types/stock';
 import { loadPurchaseItems, savePurchaseItems, loadStockItems, saveStockItems } from '@/lib/storage';
 import { Plus, ExternalLink, Package } from 'lucide-react';
@@ -28,6 +29,10 @@ export default function PurchaseManagement() {
   useEffect(() => {
     setPurchaseItems(loadPurchaseItems());
   }, []);
+
+  const generateItemId = () => {
+    return 'ITEM-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substr(2, 3).toUpperCase();
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,6 +62,7 @@ export default function PurchaseManagement() {
 
     const newItem: PurchaseItem = {
       id: Date.now().toString(),
+      itemId: generateItemId(),
       itemName: formData.itemName,
       whereToBuy: formData.whereToBuy,
       price: parseFloat(formData.price),
@@ -138,6 +144,26 @@ export default function PurchaseManagement() {
       title: "Moved to Stock",
       description: `${purchaseItem.itemName} has been added to stock inventory.`,
     });
+  };
+
+  const handleRepurchase = (item: PurchaseItem) => {
+    const newItem: PurchaseItem = {
+      id: Date.now().toString(),
+      itemId: generateItemId(),
+      itemName: item.itemName,
+      whereToBuy: item.whereToBuy,
+      price: item.price,
+      quantity: item.quantity,
+      link: item.link,
+      status: 'considering',
+      courseTag: item.courseTag,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const updatedItems = [...purchaseItems, newItem];
+    setPurchaseItems(updatedItems);
+    savePurchaseItems(updatedItems);
   };
 
   return (
@@ -266,6 +292,7 @@ export default function PurchaseManagement() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Item ID</TableHead>
                   <TableHead>Item Name</TableHead>
                   <TableHead>Where to Buy</TableHead>
                   <TableHead>Price</TableHead>
@@ -278,6 +305,7 @@ export default function PurchaseManagement() {
               <TableBody>
                 {purchaseItems.map((item) => (
                   <TableRow key={item.id}>
+                    <TableCell className="font-mono text-xs">{item.itemId}</TableCell>
                     <TableCell className="font-medium">{item.itemName}</TableCell>
                     <TableCell>{item.whereToBuy}</TableCell>
                     <TableCell>${item.price.toFixed(2)}</TableCell>
@@ -300,13 +328,19 @@ export default function PurchaseManagement() {
                       </Select>
                     </TableCell>
                     <TableCell>
-                      {item.link && (
-                        <Button variant="ghost" size="sm" asChild>
-                          <a href={item.link} target="_blank" rel="noopener noreferrer">
-                            <ExternalLink className="w-4 h-4" />
-                          </a>
-                        </Button>
-                      )}
+                      <div className="flex gap-2">
+                        {item.link && (
+                          <Button variant="ghost" size="sm" asChild>
+                            <a href={item.link} target="_blank" rel="noopener noreferrer">
+                              <ExternalLink className="w-4 h-4" />
+                            </a>
+                          </Button>
+                        )}
+                        <RepurchaseButton 
+                          item={item} 
+                          onRepurchase={handleRepurchase}
+                        />
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

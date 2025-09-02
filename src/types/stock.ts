@@ -3,6 +3,7 @@ export type StockStatus = 'available' | 'low_stock' | 'out_of_stock';
 
 export interface PurchaseItem {
   id: string;
+  itemId: string; // Auto-generated item ID for repurchase functionality
   itemName: string;
   whereToBuy: string;
   price: number;

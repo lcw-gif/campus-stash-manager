@@ -6,14 +6,16 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { StockTransaction, StockItem } from '@/types/stock';
-import { loadStockTransactions, saveStockTransactions, loadStockItems } from '@/lib/storage';
+import { RepurchaseButton } from '@/components/RepurchaseButton';
+import { StockTransaction, StockItem, PurchaseItem } from '@/types/stock';
+import { loadStockTransactions, saveStockTransactions, loadStockItems, loadPurchaseItems, savePurchaseItems } from '@/lib/storage';
 import { History, Edit } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export default function TransactionHistory() {
   const [transactions, setTransactions] = useState<StockTransaction[]>([]);
   const [stockItems, setStockItems] = useState<StockItem[]>([]);
+  const [purchaseItems, setPurchaseItems] = useState<PurchaseItem[]>([]);
   const [editingTransaction, setEditingTransaction] = useState<StockTransaction | null>(null);
   const [editForm, setEditForm] = useState({
     type: 'in' as 'in' | 'out',
@@ -26,6 +28,7 @@ export default function TransactionHistory() {
   useEffect(() => {
     setTransactions(loadStockTransactions());
     setStockItems(loadStockItems());
+    setPurchaseItems(loadPurchaseItems());
   }, []);
 
   const getItemName = (stockItemId: string) => {
@@ -77,6 +80,43 @@ export default function TransactionHistory() {
     });
   };
 
+  const generateItemId = () => {
+    return 'ITEM-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substr(2, 3).toUpperCase();
+  };
+
+  const handleRepurchase = (originalItem: PurchaseItem) => {
+    const newItem: PurchaseItem = {
+      id: Date.now().toString(),
+      itemId: generateItemId(),
+      itemName: originalItem.itemName,
+      whereToBuy: originalItem.whereToBuy,
+      price: originalItem.price,
+      quantity: originalItem.quantity,
+      link: originalItem.link,
+      status: 'considering',
+      courseTag: originalItem.courseTag,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const updatedPurchaseItems = [...purchaseItems, newItem];
+    setPurchaseItems(updatedPurchaseItems);
+    savePurchaseItems(updatedPurchaseItems);
+  };
+
+  const getOriginalPurchaseItem = (stockItemId: string): PurchaseItem | null => {
+    const stockItem = stockItems.find(item => item.id === stockItemId);
+    if (!stockItem) return null;
+
+    // Find the original purchase item by matching name and other details
+    const originalItem = purchaseItems.find(item => 
+      item.itemName === stockItem.itemName && 
+      item.status === 'arrived'
+    );
+    
+    return originalItem || null;
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -111,101 +151,113 @@ export default function TransactionHistory() {
               <TableBody>
                 {transactions
                   .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                  .map((transaction) => (
-                    <TableRow key={transaction.id}>
-                      <TableCell>
-                        {new Date(transaction.date).toLocaleDateString()} {new Date(transaction.date).toLocaleTimeString()}
-                      </TableCell>
-                      <TableCell className="font-medium">{getItemName(transaction.stockItemId)}</TableCell>
-                      <TableCell>
-                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                          transaction.type === 'in' 
-                            ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' 
-                            : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                        }`}>
-                          {transaction.type === 'in' ? 'Stock In' : 'Stock Out'}
-                        </span>
-                      </TableCell>
-                      <TableCell>{transaction.quantity}</TableCell>
-                      <TableCell>{transaction.reason}</TableCell>
-                      <TableCell>{transaction.performedBy}</TableCell>
-                      <TableCell>
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button 
-                              variant="ghost" 
-                              size="sm"
-                              onClick={() => startEdit(transaction)}
-                            >
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle>Edit Transaction</DialogTitle>
-                              <DialogDescription>
-                                Edit transaction details for {getItemName(transaction.stockItemId)}
-                              </DialogDescription>
-                            </DialogHeader>
-                            <form onSubmit={handleEditSubmit} className="space-y-4">
-                              <div>
-                                <Label htmlFor="type">Type</Label>
-                                <Select 
-                                  value={editForm.type} 
-                                  onValueChange={(value: 'in' | 'out') => setEditForm({...editForm, type: value})}
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="in">Stock In</SelectItem>
-                                    <SelectItem value="out">Stock Out</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <div>
-                                <Label htmlFor="quantity">Quantity</Label>
-                                <Input
-                                  id="quantity"
-                                  value={editForm.quantity}
-                                  onChange={(e) => setEditForm({...editForm, quantity: e.target.value})}
-                                  placeholder="Enter quantity"
-                                />
-                              </div>
-                              <div>
-                                <Label htmlFor="reason">Reason</Label>
-                                <Input
-                                  id="reason"
-                                  value={editForm.reason}
-                                  onChange={(e) => setEditForm({...editForm, reason: e.target.value})}
-                                  placeholder="Enter reason"
-                                />
-                              </div>
-                              <div>
-                                <Label htmlFor="performedBy">Performed By</Label>
-                                <Input
-                                  id="performedBy"
-                                  value={editForm.performedBy}
-                                  onChange={(e) => setEditForm({...editForm, performedBy: e.target.value})}
-                                  placeholder="Enter name"
-                                />
-                              </div>
-                              <div className="flex gap-2">
-                                <Button type="submit">Save Changes</Button>
+                  .map((transaction) => {
+                    const originalItem = getOriginalPurchaseItem(transaction.stockItemId);
+                    
+                    return (
+                      <TableRow key={transaction.id}>
+                        <TableCell>
+                          {new Date(transaction.date).toLocaleDateString()} {new Date(transaction.date).toLocaleTimeString()}
+                        </TableCell>
+                        <TableCell className="font-medium">{getItemName(transaction.stockItemId)}</TableCell>
+                        <TableCell>
+                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                            transaction.type === 'in' 
+                              ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' 
+                              : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                          }`}>
+                            {transaction.type === 'in' ? 'Stock In' : 'Stock Out'}
+                          </span>
+                        </TableCell>
+                        <TableCell>{transaction.quantity}</TableCell>
+                        <TableCell>{transaction.reason}</TableCell>
+                        <TableCell>{transaction.performedBy}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Dialog>
+                              <DialogTrigger asChild>
                                 <Button 
-                                  type="button" 
-                                  variant="outline" 
-                                  onClick={() => setEditingTransaction(null)}
+                                  variant="ghost" 
+                                  size="sm"
+                                  onClick={() => startEdit(transaction)}
                                 >
-                                  Cancel
+                                  <Edit className="w-4 h-4" />
                                 </Button>
-                              </div>
-                            </form>
-                          </DialogContent>
-                        </Dialog>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                              </DialogTrigger>
+                              <DialogContent>
+                                <DialogHeader>
+                                  <DialogTitle>Edit Transaction</DialogTitle>
+                                  <DialogDescription>
+                                    Edit transaction details for {getItemName(transaction.stockItemId)}
+                                  </DialogDescription>
+                                </DialogHeader>
+                                <form onSubmit={handleEditSubmit} className="space-y-4">
+                                  <div>
+                                    <Label htmlFor="type">Type</Label>
+                                    <Select 
+                                      value={editForm.type} 
+                                      onValueChange={(value: 'in' | 'out') => setEditForm({...editForm, type: value})}
+                                    >
+                                      <SelectTrigger>
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="in">Stock In</SelectItem>
+                                        <SelectItem value="out">Stock Out</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <div>
+                                    <Label htmlFor="quantity">Quantity</Label>
+                                    <Input
+                                      id="quantity"
+                                      value={editForm.quantity}
+                                      onChange={(e) => setEditForm({...editForm, quantity: e.target.value})}
+                                      placeholder="Enter quantity"
+                                    />
+                                  </div>
+                                  <div>
+                                    <Label htmlFor="reason">Reason</Label>
+                                    <Input
+                                      id="reason"
+                                      value={editForm.reason}
+                                      onChange={(e) => setEditForm({...editForm, reason: e.target.value})}
+                                      placeholder="Enter reason"
+                                    />
+                                  </div>
+                                  <div>
+                                    <Label htmlFor="performedBy">Performed By</Label>
+                                    <Input
+                                      id="performedBy"
+                                      value={editForm.performedBy}
+                                      onChange={(e) => setEditForm({...editForm, performedBy: e.target.value})}
+                                      placeholder="Enter name"
+                                    />
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <Button type="submit">Save Changes</Button>
+                                    <Button 
+                                      type="button" 
+                                      variant="outline" 
+                                      onClick={() => setEditingTransaction(null)}
+                                    >
+                                      Cancel
+                                    </Button>
+                                  </div>
+                                </form>
+                              </DialogContent>
+                            </Dialog>
+                            {originalItem && (
+                              <RepurchaseButton 
+                                item={originalItem} 
+                                onRepurchase={handleRepurchase}
+                              />
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
               </TableBody>
             </Table>
           )}
