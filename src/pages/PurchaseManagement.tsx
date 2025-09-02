@@ -146,14 +146,14 @@ export default function PurchaseManagement() {
     });
   };
 
-  const handleRepurchase = (item: PurchaseItem) => {
+  const handleRepurchase = (item: PurchaseItem, quantity: number) => {
     const newItem: PurchaseItem = {
       id: Date.now().toString(),
       itemId: generateItemId(),
       itemName: item.itemName,
       whereToBuy: item.whereToBuy,
       price: item.price,
-      quantity: item.quantity,
+      quantity: quantity,
       link: item.link,
       status: 'considering',
       courseTag: item.courseTag,
@@ -165,6 +165,16 @@ export default function PurchaseManagement() {
     setPurchaseItems(updatedItems);
     savePurchaseItems(updatedItems);
   };
+
+  // Group items by name
+  const groupedItems = purchaseItems.reduce((groups, item) => {
+    const key = item.itemName.toLowerCase();
+    if (!groups[key]) {
+      groups[key] = [];
+    }
+    groups[key].push(item);
+    return groups;
+  }, {} as Record<string, PurchaseItem[]>);
 
   return (
     <div className="space-y-6">
@@ -303,47 +313,64 @@ export default function PurchaseManagement() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {purchaseItems.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell className="font-mono text-xs">{item.itemId}</TableCell>
-                    <TableCell className="font-medium">{item.itemName}</TableCell>
-                    <TableCell>{item.whereToBuy}</TableCell>
-                    <TableCell>${item.price.toFixed(2)}</TableCell>
-                    <TableCell>{item.quantity}</TableCell>
-                    <TableCell>{item.courseTag || '-'}</TableCell>
-                    <TableCell>
-                      <Select
-                        value={item.status}
-                        onValueChange={(value: PurchaseStatus) => updateItemStatus(item.id, value)}
-                      >
-                        <SelectTrigger className="w-40">
-                          <StatusBadge status={item.status} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="considering">Considering</SelectItem>
-                          <SelectItem value="not_consider">Not Consider</SelectItem>
-                          <SelectItem value="waiting_delivery">Waiting Delivery</SelectItem>
-                          <SelectItem value="arrived">Arrived</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        {item.link && (
-                          <Button variant="ghost" size="sm" asChild>
-                            <a href={item.link} target="_blank" rel="noopener noreferrer">
-                              <ExternalLink className="w-4 h-4" />
-                            </a>
-                          </Button>
+                {Object.entries(groupedItems).map(([itemName, items]) => 
+                  items.map((item, index) => (
+                    <TableRow key={item.id} className={index > 0 ? "border-t-0" : ""}>
+                      <TableCell className="font-mono text-xs">{item.itemId}</TableCell>
+                      <TableCell className="font-medium">
+                        {index === 0 && (
+                          <div className="flex items-center gap-2">
+                            {item.itemName}
+                            {items.length > 1 && (
+                              <span className="text-xs bg-muted px-2 py-1 rounded">
+                                {items.length} entries
+                              </span>
+                            )}
+                          </div>
                         )}
-                        <RepurchaseButton 
-                          item={item} 
-                          onRepurchase={handleRepurchase}
-                        />
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                        {index > 0 && (
+                          <span className="text-muted-foreground text-sm ml-4">└ {item.itemName}</span>
+                        )}
+                      </TableCell>
+                      <TableCell>{item.whereToBuy}</TableCell>
+                      <TableCell>${item.price.toFixed(2)}</TableCell>
+                      <TableCell>{item.quantity}</TableCell>
+                      <TableCell>{item.courseTag || '-'}</TableCell>
+                      <TableCell>
+                        <Select
+                          value={item.status}
+                          onValueChange={(value: PurchaseStatus) => updateItemStatus(item.id, value)}
+                          disabled={item.status === 'arrived'}
+                        >
+                          <SelectTrigger className="w-40">
+                            <StatusBadge status={item.status} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="considering">Considering</SelectItem>
+                            <SelectItem value="not_consider">Not Consider</SelectItem>
+                            <SelectItem value="waiting_delivery">Waiting Delivery</SelectItem>
+                            <SelectItem value="arrived">Arrived</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          {item.link && (
+                            <Button variant="ghost" size="sm" asChild>
+                              <a href={item.link} target="_blank" rel="noopener noreferrer">
+                                <ExternalLink className="w-4 h-4" />
+                              </a>
+                            </Button>
+                          )}
+                          <RepurchaseButton 
+                            item={item} 
+                            onRepurchase={handleRepurchase}
+                          />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           )}

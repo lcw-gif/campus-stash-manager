@@ -84,14 +84,14 @@ export default function TransactionHistory() {
     return 'ITEM-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substr(2, 3).toUpperCase();
   };
 
-  const handleRepurchase = (originalItem: PurchaseItem) => {
+  const handleRepurchase = (originalItem: PurchaseItem, quantity: number) => {
     const newItem: PurchaseItem = {
       id: Date.now().toString(),
       itemId: generateItemId(),
       itemName: originalItem.itemName,
       whereToBuy: originalItem.whereToBuy,
       price: originalItem.price,
-      quantity: originalItem.quantity,
+      quantity: quantity,
       link: originalItem.link,
       status: 'considering',
       courseTag: originalItem.courseTag,
