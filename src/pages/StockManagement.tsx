@@ -233,14 +233,12 @@ export default function StockManagement() {
                                 <input type="hidden" value="in" onChange={() => setTransactionForm({...transactionForm, type: 'in'})} />
                                 <div>
                                   <Label htmlFor="quantity">Quantity</Label>
-                                  <Input
-                                    id="quantity"
-                                    type="number"
-                                    min="1"
-                                    value={transactionForm.quantity}
-                                    onChange={(e) => setTransactionForm({...transactionForm, quantity: e.target.value})}
-                                    placeholder="Enter quantity"
-                                  />
+                                   <Input
+                                     id="quantity"
+                                     value={transactionForm.quantity}
+                                     onChange={(e) => setTransactionForm({...transactionForm, quantity: e.target.value})}
+                                     placeholder="Enter quantity"
+                                   />
                                 </div>
                                 <div>
                                   <Label htmlFor="reason">Reason</Label>
@@ -290,15 +288,12 @@ export default function StockManagement() {
                               }} className="space-y-4">
                                 <div>
                                   <Label htmlFor="quantity">Quantity</Label>
-                                  <Input
-                                    id="quantity"
-                                    type="number"
-                                    min="1"
-                                    max={item.availableQuantity}
-                                    value={transactionForm.quantity}
-                                    onChange={(e) => setTransactionForm({...transactionForm, quantity: e.target.value})}
-                                    placeholder="Enter quantity"
-                                  />
+                                   <Input
+                                     id="quantity"
+                                     value={transactionForm.quantity}
+                                     onChange={(e) => setTransactionForm({...transactionForm, quantity: e.target.value})}
+                                     placeholder="Enter quantity"
+                                   />
                                 </div>
                                 <div>
                                   <Label htmlFor="reason">Reason</Label>

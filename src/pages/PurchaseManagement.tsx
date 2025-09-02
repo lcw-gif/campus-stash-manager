@@ -41,6 +41,20 @@ export default function PurchaseManagement() {
       return;
     }
 
+    // Check for duplicate item names
+    const existingItem = purchaseItems.find(item => 
+      item.itemName.toLowerCase() === formData.itemName.toLowerCase()
+    );
+    
+    if (existingItem) {
+      toast({
+        title: "Duplicate Item",
+        description: "An item with this name already exists in purchase management.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const newItem: PurchaseItem = {
       id: Date.now().toString(),
       itemName: formData.itemName,
@@ -76,6 +90,9 @@ export default function PurchaseManagement() {
   };
 
   const updateItemStatus = (id: string, newStatus: PurchaseStatus) => {
+    const currentItem = purchaseItems.find(item => item.id === id);
+    if (!currentItem) return;
+
     const updatedItems = purchaseItems.map(item => 
       item.id === id 
         ? { ...item, status: newStatus, updatedAt: new Date() }
@@ -85,8 +102,8 @@ export default function PurchaseManagement() {
     setPurchaseItems(updatedItems);
     savePurchaseItems(updatedItems);
 
-    // If status is changed to "arrived", move to stock
-    if (newStatus === 'arrived') {
+    // If status is changed to "arrived" and it wasn't already arrived, move to stock
+    if (newStatus === 'arrived' && currentItem.status !== 'arrived') {
       const arrivedItem = updatedItems.find(item => item.id === id);
       if (arrivedItem) {
         moveToStock(arrivedItem);
@@ -170,9 +187,6 @@ export default function PurchaseManagement() {
                   <Label htmlFor="price">Price *</Label>
                   <Input
                     id="price"
-                    type="number"
-                    step="0.01"
-                    min="0"
                     value={formData.price}
                     onChange={(e) => setFormData({ ...formData, price: e.target.value })}
                     placeholder="0.00"
@@ -183,8 +197,6 @@ export default function PurchaseManagement() {
                   <Label htmlFor="quantity">Quantity *</Label>
                   <Input
                     id="quantity"
-                    type="number"
-                    min="1"
                     value={formData.quantity}
                     onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
                     placeholder="1"
@@ -221,7 +233,6 @@ export default function PurchaseManagement() {
                 <Label htmlFor="link">Purchase Link</Label>
                 <Input
                   id="link"
-                  type="url"
                   value={formData.link}
                   onChange={(e) => setFormData({ ...formData, link: e.target.value })}
                   placeholder="https://..."
