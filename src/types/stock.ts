@@ -1,4 +1,4 @@
-export type PurchaseStatus = 'considering' | 'not_consider' | 'waiting_delivery' | 'arrived';
+export type PurchaseStatus = 'considering' | 'not_consider' | 'waiting_delivery' | 'arrived' | 'stored';
 export type StockStatus = 'available' | 'low_stock' | 'out_of_stock';
 
 export interface PurchaseItem {

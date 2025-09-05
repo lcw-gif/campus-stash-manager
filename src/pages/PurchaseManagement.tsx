@@ -110,11 +110,12 @@ export default function PurchaseManagement() {
     setPurchaseItems(updatedItems);
     savePurchaseItems(updatedItems);
 
-    // If status is changed to "arrived" and it wasn't already arrived, move to stock
-    if (newStatus === 'arrived' && currentItem.status !== 'arrived') {
-      const arrivedItem = updatedItems.find(item => item.id === id);
-      if (arrivedItem) {
-        moveToStock(arrivedItem);
+    // If status is changed to "arrived" or "stored", move to stock
+    if ((newStatus === 'arrived' && currentItem.status !== 'arrived') || 
+        (newStatus === 'stored' && currentItem.status !== 'stored')) {
+      const item = updatedItems.find(item => item.id === id);
+      if (item) {
+        moveToStock(item);
       }
     }
 
@@ -407,6 +408,7 @@ export default function PurchaseManagement() {
                       <SelectItem value="not_consider">Not Consider</SelectItem>
                       <SelectItem value="waiting_delivery">Waiting Delivery</SelectItem>
                       <SelectItem value="arrived">Arrived</SelectItem>
+                      <SelectItem value="stored">Stored</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -488,7 +490,7 @@ export default function PurchaseManagement() {
                         <Select
                           value={item.status}
                           onValueChange={(value: PurchaseStatus) => updateItemStatus(item.id, value)}
-                          disabled={item.status === 'arrived'}
+                          disabled={item.status === 'arrived' || item.status === 'stored'}
                         >
                           <SelectTrigger className="w-40">
                             <StatusBadge status={item.status} />
@@ -498,6 +500,7 @@ export default function PurchaseManagement() {
                             <SelectItem value="not_consider">Not Consider</SelectItem>
                             <SelectItem value="waiting_delivery">Waiting Delivery</SelectItem>
                             <SelectItem value="arrived">Arrived</SelectItem>
+                            <SelectItem value="stored">Stored</SelectItem>
                           </SelectContent>
                         </Select>
                       </TableCell>
