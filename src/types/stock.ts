@@ -11,6 +11,8 @@ export interface PurchaseItem {
   link?: string;
   status: PurchaseStatus;
   courseTag?: string;
+  isPresent?: boolean;
+  lastChecked?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -23,6 +25,8 @@ export interface StockItem {
   location: string;
   courseTag?: string;
   purchasePrice: number;
+  isPresent?: boolean;
+  lastChecked?: Date;
   createdAt: Date;
   updatedAt: Date;
 }

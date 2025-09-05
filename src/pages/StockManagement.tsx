@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { StockItem, StockTransaction } from '@/types/stock';
 import { loadStockItems, saveStockItems, loadStockTransactions, saveStockTransactions } from '@/lib/storage';
-import { Package, Plus, Minus, MapPin, Edit, Download, Upload } from 'lucide-react';
+import { Package, Plus, Minus, MapPin, Edit, Download, Upload, CheckCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { exportToCsv, exportToJson, parseCSV, convertCsvToStockItems, readFileAsText } from '@/lib/fileUtils';
 
@@ -275,6 +275,22 @@ export default function StockManagement() {
     event.target.value = '';
   };
 
+  const recordPresent = (id: string) => {
+    const updatedItems = stockItems.map(item => 
+      item.id === id 
+        ? { ...item, isPresent: true, lastChecked: new Date(), updatedAt: new Date() }
+        : item
+    );
+    
+    setStockItems(updatedItems);
+    saveStockItems(updatedItems);
+
+    toast({
+      title: "Item Recorded",
+      description: "Item marked as present in inventory check.",
+    });
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -340,6 +356,7 @@ export default function StockManagement() {
                   <TableHead>Location</TableHead>
                   <TableHead>Course</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Present</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -369,6 +386,25 @@ export default function StockManagement() {
                       <TableCell>{item.courseTag || '-'}</TableCell>
                       <TableCell>
                         <span className={status.color}>{status.status}</span>
+                      </TableCell>
+                      <TableCell>
+                        {item.isPresent ? (
+                          <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                            <CheckCircle className="w-4 h-4" />
+                            <span className="text-xs">
+                              {item.lastChecked ? new Date(item.lastChecked).toLocaleDateString() : 'Present'}
+                            </span>
+                          </div>
+                        ) : (
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => recordPresent(item.id)}
+                          >
+                            <CheckCircle className="w-4 h-4 mr-1" />
+                            Record Present
+                          </Button>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-2">

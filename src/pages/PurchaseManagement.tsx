@@ -9,7 +9,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { RepurchaseButton } from '@/components/RepurchaseButton';
 import { PurchaseItem, PurchaseStatus } from '@/types/stock';
 import { loadPurchaseItems, savePurchaseItems, loadStockItems, saveStockItems } from '@/lib/storage';
-import { Plus, ExternalLink, Package, Download, Upload } from 'lucide-react';
+import { Plus, ExternalLink, Package, Download, Upload, CheckCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { exportToCsv, exportToJson, parseCSV, convertCsvToPurchaseItems, readFileAsText } from '@/lib/fileUtils';
 
@@ -166,6 +166,22 @@ export default function PurchaseManagement() {
     const updatedItems = [...purchaseItems, newItem];
     setPurchaseItems(updatedItems);
     savePurchaseItems(updatedItems);
+  };
+
+  const recordPresent = (id: string) => {
+    const updatedItems = purchaseItems.map(item => 
+      item.id === id 
+        ? { ...item, isPresent: true, lastChecked: new Date(), updatedAt: new Date() }
+        : item
+    );
+    
+    setPurchaseItems(updatedItems);
+    savePurchaseItems(updatedItems);
+
+    toast({
+      title: "Item Recorded",
+      description: "Item marked as present in inventory check.",
+    });
   };
 
   const exportPurchaseItems = (format: 'csv' | 'json') => {
@@ -440,6 +456,7 @@ export default function PurchaseManagement() {
                   <TableHead>Qty</TableHead>
                   <TableHead>Course</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Present</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -483,6 +500,25 @@ export default function PurchaseManagement() {
                             <SelectItem value="arrived">Arrived</SelectItem>
                           </SelectContent>
                         </Select>
+                      </TableCell>
+                      <TableCell>
+                        {item.isPresent ? (
+                          <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                            <CheckCircle className="w-4 h-4" />
+                            <span className="text-xs">
+                              {item.lastChecked ? new Date(item.lastChecked).toLocaleDateString() : 'Present'}
+                            </span>
+                          </div>
+                        ) : (
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => recordPresent(item.id)}
+                          >
+                            <CheckCircle className="w-4 h-4 mr-1" />
+                            Record Present
+                          </Button>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-2">
