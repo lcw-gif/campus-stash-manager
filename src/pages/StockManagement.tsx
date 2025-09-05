@@ -8,8 +8,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { StockItem, StockTransaction } from '@/types/stock';
 import { loadStockItems, saveStockItems, loadStockTransactions, saveStockTransactions } from '@/lib/storage';
-import { Package, Plus, Minus, MapPin, Edit } from 'lucide-react';
+import { Package, Plus, Minus, MapPin, Edit, Download, Upload } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { exportToCsv, exportToJson, parseCSV, convertCsvToStockItems, readFileAsText } from '@/lib/fileUtils';
 
 export default function StockManagement() {
   const [stockItems, setStockItems] = useState<StockItem[]>([]);
@@ -25,6 +26,7 @@ export default function StockManagement() {
     itemId: '',
     newLocation: '',
   });
+  const [fileInputRef, setFileInputRef] = useState<HTMLInputElement | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -148,11 +150,170 @@ export default function StockManagement() {
       .slice(0, 3);
   };
 
+  const exportStockItems = (format: 'csv' | 'json') => {
+    if (stockItems.length === 0) {
+      toast({
+        title: "No Data",
+        description: "No stock items to export.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const timestamp = new Date().toISOString().split('T')[0];
+    
+    if (format === 'csv') {
+      const headers = ['itemName', 'totalQuantity', 'availableQuantity', 'location', 'courseTag', 'purchasePrice'];
+      exportToCsv(stockItems, `stock-items-${timestamp}.csv`, headers);
+    } else {
+      exportToJson(stockItems, `stock-items-${timestamp}.json`);
+    }
+
+    toast({
+      title: "Export Successful",
+      description: `Stock items exported as ${format.toUpperCase()}`,
+    });
+  };
+
+  const exportTransactions = (format: 'csv' | 'json') => {
+    if (transactions.length === 0) {
+      toast({
+        title: "No Data",
+        description: "No transactions to export.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const timestamp = new Date().toISOString().split('T')[0];
+    const transactionData = transactions.map(t => ({
+      ...t,
+      itemName: stockItems.find(item => item.id === t.stockItemId)?.itemName || 'Unknown Item'
+    }));
+    
+    if (format === 'csv') {
+      const headers = ['itemName', 'type', 'quantity', 'reason', 'performedBy', 'date'];
+      exportToCsv(transactionData, `transactions-${timestamp}.csv`, headers);
+    } else {
+      exportToJson(transactionData, `transactions-${timestamp}.json`);
+    }
+
+    toast({
+      title: "Export Successful",
+      description: `Transactions exported as ${format.toUpperCase()}`,
+    });
+  };
+
+  const handleFileImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const fileContent = await readFileAsText(file);
+      
+      if (file.name.endsWith('.csv')) {
+        const csvData = parseCSV(fileContent);
+        const newItems = convertCsvToStockItems(csvData);
+        
+        if (newItems.length === 0) {
+          toast({
+            title: "Import Failed",
+            description: "No valid items found in the CSV file. Please check the format.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const updatedItems = [...stockItems, ...newItems];
+        setStockItems(updatedItems);
+        saveStockItems(updatedItems);
+
+        toast({
+          title: "Import Successful",
+          description: `${newItems.length} items imported successfully.`,
+        });
+      } else if (file.name.endsWith('.json')) {
+        const jsonData = JSON.parse(fileContent);
+        if (Array.isArray(jsonData)) {
+          const validItems = jsonData.filter(item => 
+            item.itemName && item.totalQuantity && item.availableQuantity
+          ).map(item => ({
+            ...item,
+            id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          }));
+
+          if (validItems.length === 0) {
+            toast({
+              title: "Import Failed",
+              description: "No valid items found in the JSON file.",
+              variant: "destructive",
+            });
+            return;
+          }
+
+          const updatedItems = [...stockItems, ...validItems];
+          setStockItems(updatedItems);
+          saveStockItems(updatedItems);
+
+          toast({
+            title: "Import Successful",
+            description: `${validItems.length} items imported successfully.`,
+          });
+        }
+      }
+    } catch (error) {
+      toast({
+        title: "Import Failed",
+        description: "Failed to read or parse the file. Please check the file format.",
+        variant: "destructive",
+      });
+    }
+
+    // Reset file input
+    event.target.value = '';
+  };
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">Stock Management</h1>
-        <p className="text-muted-foreground">Manage your inventory and track stock movements</p>
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Stock Management</h1>
+          <p className="text-muted-foreground">Manage your inventory and track stock movements</p>
+        </div>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            onClick={() => exportStockItems('csv')}
+            disabled={stockItems.length === 0}
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export Stock CSV
+          </Button>
+          <Button 
+            variant="outline" 
+            onClick={() => exportTransactions('csv')}
+            disabled={transactions.length === 0}
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export Transactions CSV
+          </Button>
+          <Button 
+            variant="outline" 
+            onClick={() => fileInputRef?.click()}
+          >
+            <Upload className="w-4 h-4 mr-2" />
+            Import Stock
+          </Button>
+          <input
+            ref={setFileInputRef}
+            type="file"
+            accept=".csv,.json"
+            onChange={handleFileImport}
+            style={{ display: 'none' }}
+          />
+        </div>
       </div>
 
       {/* Stock Items Table */}

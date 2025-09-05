@@ -9,8 +9,9 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { RepurchaseButton } from '@/components/RepurchaseButton';
 import { PurchaseItem, PurchaseStatus } from '@/types/stock';
 import { loadPurchaseItems, savePurchaseItems, loadStockItems, saveStockItems } from '@/lib/storage';
-import { Plus, ExternalLink, Package } from 'lucide-react';
+import { Plus, ExternalLink, Package, Download, Upload } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { exportToCsv, exportToJson, parseCSV, convertCsvToPurchaseItems, readFileAsText } from '@/lib/fileUtils';
 
 export default function PurchaseManagement() {
   const [purchaseItems, setPurchaseItems] = useState<PurchaseItem[]>([]);
@@ -24,6 +25,7 @@ export default function PurchaseManagement() {
     status: 'considering' as PurchaseStatus,
     courseTag: '',
   });
+  const [fileInputRef, setFileInputRef] = useState<HTMLInputElement | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -166,6 +168,103 @@ export default function PurchaseManagement() {
     savePurchaseItems(updatedItems);
   };
 
+  const exportPurchaseItems = (format: 'csv' | 'json') => {
+    if (purchaseItems.length === 0) {
+      toast({
+        title: "No Data",
+        description: "No purchase items to export.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const timestamp = new Date().toISOString().split('T')[0];
+    
+    if (format === 'csv') {
+      const headers = ['itemId', 'itemName', 'whereToBuy', 'price', 'quantity', 'status', 'courseTag', 'link'];
+      exportToCsv(purchaseItems, `purchase-items-${timestamp}.csv`, headers);
+    } else {
+      exportToJson(purchaseItems, `purchase-items-${timestamp}.json`);
+    }
+
+    toast({
+      title: "Export Successful",
+      description: `Purchase items exported as ${format.toUpperCase()}`,
+    });
+  };
+
+  const handleFileImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const fileContent = await readFileAsText(file);
+      
+      if (file.name.endsWith('.csv')) {
+        const csvData = parseCSV(fileContent);
+        const newItems = convertCsvToPurchaseItems(csvData);
+        
+        if (newItems.length === 0) {
+          toast({
+            title: "Import Failed",
+            description: "No valid items found in the CSV file. Please check the format.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const updatedItems = [...purchaseItems, ...newItems];
+        setPurchaseItems(updatedItems);
+        savePurchaseItems(updatedItems);
+
+        toast({
+          title: "Import Successful",
+          description: `${newItems.length} items imported successfully.`,
+        });
+      } else if (file.name.endsWith('.json')) {
+        const jsonData = JSON.parse(fileContent);
+        if (Array.isArray(jsonData)) {
+          const validItems = jsonData.filter(item => 
+            item.itemName && item.whereToBuy && item.price && item.quantity
+          ).map(item => ({
+            ...item,
+            id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+            itemId: item.itemId || 'ITEM-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substr(2, 3).toUpperCase(),
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          }));
+
+          if (validItems.length === 0) {
+            toast({
+              title: "Import Failed",
+              description: "No valid items found in the JSON file.",
+              variant: "destructive",
+            });
+            return;
+          }
+
+          const updatedItems = [...purchaseItems, ...validItems];
+          setPurchaseItems(updatedItems);
+          savePurchaseItems(updatedItems);
+
+          toast({
+            title: "Import Successful",
+            description: `${validItems.length} items imported successfully.`,
+          });
+        }
+      }
+    } catch (error) {
+      toast({
+        title: "Import Failed",
+        description: "Failed to read or parse the file. Please check the file format.",
+        variant: "destructive",
+      });
+    }
+
+    // Reset file input
+    event.target.value = '';
+  };
+
   // Group items by name
   const groupedItems = purchaseItems.reduce((groups, item) => {
     const key = item.itemName.toLowerCase();
@@ -183,10 +282,42 @@ export default function PurchaseManagement() {
           <h1 className="text-3xl font-bold text-foreground">Purchase Management</h1>
           <p className="text-muted-foreground">Track and manage your purchase orders</p>
         </div>
-        <Button onClick={() => setShowAddForm(!showAddForm)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Add Purchase Item
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            onClick={() => exportPurchaseItems('csv')}
+            disabled={purchaseItems.length === 0}
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export CSV
+          </Button>
+          <Button 
+            variant="outline" 
+            onClick={() => exportPurchaseItems('json')}
+            disabled={purchaseItems.length === 0}
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export JSON
+          </Button>
+          <Button 
+            variant="outline" 
+            onClick={() => fileInputRef?.click()}
+          >
+            <Upload className="w-4 h-4 mr-2" />
+            Import File
+          </Button>
+          <input
+            ref={setFileInputRef}
+            type="file"
+            accept=".csv,.json"
+            onChange={handleFileImport}
+            style={{ display: 'none' }}
+          />
+          <Button onClick={() => setShowAddForm(!showAddForm)}>
+            <Plus className="w-4 h-4 mr-2" />
+            Add Purchase Item
+          </Button>
+        </div>
       </div>
 
       {/* Add Item Form */}

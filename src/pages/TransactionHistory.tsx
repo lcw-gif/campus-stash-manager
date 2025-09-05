@@ -9,8 +9,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { RepurchaseButton } from '@/components/RepurchaseButton';
 import { StockTransaction, StockItem, PurchaseItem } from '@/types/stock';
 import { loadStockTransactions, saveStockTransactions, loadStockItems, loadPurchaseItems, savePurchaseItems } from '@/lib/storage';
-import { History, Edit } from 'lucide-react';
+import { History, Edit, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { exportToCsv, exportToJson } from '@/lib/fileUtils';
 
 export default function TransactionHistory() {
   const [transactions, setTransactions] = useState<StockTransaction[]>([]);
@@ -117,11 +118,61 @@ export default function TransactionHistory() {
     return originalItem || null;
   };
 
+  const exportTransactions = (format: 'csv' | 'json') => {
+    if (transactions.length === 0) {
+      toast({
+        title: "No Data",
+        description: "No transactions to export.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const timestamp = new Date().toISOString().split('T')[0];
+    const transactionData = transactions.map(t => ({
+      ...t,
+      itemName: getItemName(t.stockItemId),
+      date: new Date(t.date).toISOString()
+    }));
+    
+    if (format === 'csv') {
+      const headers = ['date', 'itemName', 'type', 'quantity', 'reason', 'performedBy'];
+      exportToCsv(transactionData, `transaction-history-${timestamp}.csv`, headers);
+    } else {
+      exportToJson(transactionData, `transaction-history-${timestamp}.json`);
+    }
+
+    toast({
+      title: "Export Successful",
+      description: `Transaction history exported as ${format.toUpperCase()}`,
+    });
+  };
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">Transaction History</h1>
-        <p className="text-muted-foreground">View and edit all stock movement transactions</p>
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Transaction History</h1>
+          <p className="text-muted-foreground">View and edit all stock movement transactions</p>
+        </div>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            onClick={() => exportTransactions('csv')}
+            disabled={transactions.length === 0}
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export CSV
+          </Button>
+          <Button 
+            variant="outline" 
+            onClick={() => exportTransactions('json')}
+            disabled={transactions.length === 0}
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export JSON
+          </Button>
+        </div>
       </div>
 
       <Card>
