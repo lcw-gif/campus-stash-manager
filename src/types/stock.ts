@@ -40,3 +40,21 @@ export interface StockTransaction {
   performedBy: string;
   date: Date;
 }
+
+export type BorrowStatus = 'borrowed' | 'returned';
+
+export interface BorrowRecord {
+  id: string;
+  stockItemId: string;
+  itemName: string;
+  borrowerName: string;
+  borrowerContact?: string;
+  quantity: number;
+  borrowDate: Date;
+  expectedReturnDate?: Date;
+  actualReturnDate?: Date;
+  status: BorrowStatus;
+  notes?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}

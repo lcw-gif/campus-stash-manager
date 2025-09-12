@@ -7,6 +7,7 @@ import { Navigation } from "@/components/Navigation";
 import Dashboard from "./pages/Dashboard";
 import PurchaseManagement from "./pages/PurchaseManagement";
 import StockManagement from "./pages/StockManagement";
+import BorrowManagement from "./pages/BorrowManagement";
 import TransactionHistory from "./pages/TransactionHistory";
 import SearchPage from "./pages/SearchPage";
 import NotFound from "./pages/NotFound";
@@ -26,6 +27,7 @@ const App = () => (
               <Route path="/" element={<Dashboard />} />
               <Route path="/purchase" element={<PurchaseManagement />} />
               <Route path="/stock" element={<StockManagement />} />
+              <Route path="/borrow" element={<BorrowManagement />} />
               <Route path="/history" element={<TransactionHistory />} />
               <Route path="/search" element={<SearchPage />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

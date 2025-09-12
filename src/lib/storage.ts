@@ -1,9 +1,10 @@
-import { PurchaseItem, StockItem, StockTransaction } from '@/types/stock';
+import { PurchaseItem, StockItem, StockTransaction, BorrowRecord } from '@/types/stock';
 
 const STORAGE_KEYS = {
   PURCHASE_ITEMS: 'school_stock_purchase_items',
   STOCK_ITEMS: 'school_stock_items',
   STOCK_TRANSACTIONS: 'school_stock_transactions',
+  BORROW_RECORDS: 'school_stock_borrow_records',
 } as const;
 
 // Purchase Items
@@ -50,5 +51,24 @@ export const loadStockTransactions = (): StockTransaction[] => {
   return JSON.parse(stored).map((transaction: any) => ({
     ...transaction,
     date: new Date(transaction.date),
+  }));
+};
+
+// Borrow Records
+export const saveBorrowRecords = (records: BorrowRecord[]) => {
+  localStorage.setItem(STORAGE_KEYS.BORROW_RECORDS, JSON.stringify(records));
+};
+
+export const loadBorrowRecords = (): BorrowRecord[] => {
+  const stored = localStorage.getItem(STORAGE_KEYS.BORROW_RECORDS);
+  if (!stored) return [];
+  
+  return JSON.parse(stored).map((record: any) => ({
+    ...record,
+    borrowDate: new Date(record.borrowDate),
+    expectedReturnDate: record.expectedReturnDate ? new Date(record.expectedReturnDate) : undefined,
+    actualReturnDate: record.actualReturnDate ? new Date(record.actualReturnDate) : undefined,
+    createdAt: new Date(record.createdAt),
+    updatedAt: new Date(record.updatedAt),
   }));
 };
