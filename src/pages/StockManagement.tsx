@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { StockItem, StockTransaction } from '@/types/stock';
 import { loadStockItems, saveStockItems, loadStockTransactions, saveStockTransactions } from '@/lib/storage';
-import { Package, Plus, Minus, MapPin, Edit, Download, Upload, CheckCircle } from 'lucide-react';
+import { Package, Plus, Minus, MapPin, Download, Upload, CheckCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { exportToCsv, exportToJson, parseCSV, convertCsvToStockItems, readFileAsText } from '@/lib/fileUtils';
 
@@ -22,17 +22,63 @@ export default function StockManagement() {
     reason: '',
     performedBy: '',
   });
-  const [locationForm, setLocationForm] = useState({
-    itemId: '',
-    newLocation: '',
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addItemForm, setAddItemForm] = useState({
+    itemName: '',
+    totalQuantity: '',
+    location: '',
+    courseTag: '',
+    purchasePrice: '',
   });
-  const [fileInputRef, setFileInputRef] = useState<HTMLInputElement | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
     setStockItems(loadStockItems());
     setTransactions(loadStockTransactions());
   }, []);
+
+  const handleAddNewItem = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!addItemForm.itemName || !addItemForm.totalQuantity || !addItemForm.location || !addItemForm.purchasePrice) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const newStockItem: StockItem = {
+      id: Date.now().toString(),
+      itemName: addItemForm.itemName,
+      totalQuantity: parseInt(addItemForm.totalQuantity),
+      availableQuantity: parseInt(addItemForm.totalQuantity),
+      location: addItemForm.location,
+      courseTag: addItemForm.courseTag || undefined,
+      purchasePrice: parseFloat(addItemForm.purchasePrice),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const updatedItems = [...stockItems, newStockItem];
+    setStockItems(updatedItems);
+    saveStockItems(updatedItems);
+
+    setAddItemForm({
+      itemName: '',
+      totalQuantity: '',
+      location: '',
+      courseTag: '',
+      purchasePrice: '',
+    });
+    setShowAddForm(false);
+
+    toast({
+      title: "Success",
+      description: "Stock item added successfully!",
+    });
+  };
 
   const handleTransaction = (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,7 +118,6 @@ export default function StockManagement() {
     setTransactions(updatedTransactions);
     saveStockTransactions(updatedTransactions);
 
-    // Update stock quantity
     const updatedStockItems = stockItems.map(item => 
       item.id === selectedItem.id
         ? {
@@ -105,190 +150,10 @@ export default function StockManagement() {
     });
   };
 
-  const updateLocation = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!locationForm.itemId || !locationForm.newLocation) {
-      toast({
-        title: "Error",
-        description: "Please select an item and enter a new location.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const updatedStockItems = stockItems.map(item => 
-      item.id === locationForm.itemId
-        ? { ...item, location: locationForm.newLocation, updatedAt: new Date() }
-        : item
-    );
-
-    setStockItems(updatedStockItems);
-    saveStockItems(updatedStockItems);
-
-    setLocationForm({
-      itemId: '',
-      newLocation: '',
-    });
-
-    toast({
-      title: "Location Updated",
-      description: "Item location has been successfully updated.",
-    });
-  };
-
   const getStockStatus = (item: StockItem) => {
     if (item.availableQuantity === 0) return { status: 'Out of Stock', color: 'text-destructive' };
     if (item.availableQuantity < 5) return { status: 'Low Stock', color: 'text-warning' };
     return { status: 'In Stock', color: 'text-success' };
-  };
-
-  const getItemTransactions = (itemId: string) => {
-    return transactions
-      .filter(t => t.stockItemId === itemId)
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, 3);
-  };
-
-  const exportStockItems = (format: 'csv' | 'json') => {
-    if (stockItems.length === 0) {
-      toast({
-        title: "No Data",
-        description: "No stock items to export.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const timestamp = new Date().toISOString().split('T')[0];
-    
-    if (format === 'csv') {
-      const headers = ['itemName', 'totalQuantity', 'availableQuantity', 'location', 'courseTag', 'purchasePrice'];
-      exportToCsv(stockItems, `stock-items-${timestamp}.csv`, headers);
-    } else {
-      exportToJson(stockItems, `stock-items-${timestamp}.json`);
-    }
-
-    toast({
-      title: "Export Successful",
-      description: `Stock items exported as ${format.toUpperCase()}`,
-    });
-  };
-
-  const exportTransactions = (format: 'csv' | 'json') => {
-    if (transactions.length === 0) {
-      toast({
-        title: "No Data",
-        description: "No transactions to export.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const timestamp = new Date().toISOString().split('T')[0];
-    const transactionData = transactions.map(t => ({
-      ...t,
-      itemName: stockItems.find(item => item.id === t.stockItemId)?.itemName || 'Unknown Item'
-    }));
-    
-    if (format === 'csv') {
-      const headers = ['itemName', 'type', 'quantity', 'reason', 'performedBy', 'date'];
-      exportToCsv(transactionData, `transactions-${timestamp}.csv`, headers);
-    } else {
-      exportToJson(transactionData, `transactions-${timestamp}.json`);
-    }
-
-    toast({
-      title: "Export Successful",
-      description: `Transactions exported as ${format.toUpperCase()}`,
-    });
-  };
-
-  const handleFileImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    try {
-      const fileContent = await readFileAsText(file);
-      
-      if (file.name.endsWith('.csv')) {
-        const csvData = parseCSV(fileContent);
-        const newItems = convertCsvToStockItems(csvData);
-        
-        if (newItems.length === 0) {
-          toast({
-            title: "Import Failed",
-            description: "No valid items found in the CSV file. Please check the format.",
-            variant: "destructive",
-          });
-          return;
-        }
-
-        const updatedItems = [...stockItems, ...newItems];
-        setStockItems(updatedItems);
-        saveStockItems(updatedItems);
-
-        toast({
-          title: "Import Successful",
-          description: `${newItems.length} items imported successfully.`,
-        });
-      } else if (file.name.endsWith('.json')) {
-        const jsonData = JSON.parse(fileContent);
-        if (Array.isArray(jsonData)) {
-          const validItems = jsonData.filter(item => 
-            item.itemName && item.totalQuantity && item.availableQuantity
-          ).map(item => ({
-            ...item,
-            id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          }));
-
-          if (validItems.length === 0) {
-            toast({
-              title: "Import Failed",
-              description: "No valid items found in the JSON file.",
-              variant: "destructive",
-            });
-            return;
-          }
-
-          const updatedItems = [...stockItems, ...validItems];
-          setStockItems(updatedItems);
-          saveStockItems(updatedItems);
-
-          toast({
-            title: "Import Successful",
-            description: `${validItems.length} items imported successfully.`,
-          });
-        }
-      }
-    } catch (error) {
-      toast({
-        title: "Import Failed",
-        description: "Failed to read or parse the file. Please check the file format.",
-        variant: "destructive",
-      });
-    }
-
-    // Reset file input
-    event.target.value = '';
-  };
-
-  const recordPresent = (id: string) => {
-    const updatedItems = stockItems.map(item => 
-      item.id === id 
-        ? { ...item, isPresent: true, lastChecked: new Date(), updatedAt: new Date() }
-        : item
-    );
-    
-    setStockItems(updatedItems);
-    saveStockItems(updatedItems);
-
-    toast({
-      title: "Item Recorded",
-      description: "Item marked as present in inventory check.",
-    });
   };
 
   return (
@@ -298,39 +163,82 @@ export default function StockManagement() {
           <h1 className="text-3xl font-bold text-foreground">Stock Management</h1>
           <p className="text-muted-foreground">Manage your inventory and track stock movements</p>
         </div>
-        <div className="flex gap-2">
-          <Button 
-            variant="outline" 
-            onClick={() => exportStockItems('csv')}
-            disabled={stockItems.length === 0}
-          >
-            <Download className="w-4 h-4 mr-2" />
-            Export Stock CSV
-          </Button>
-          <Button 
-            variant="outline" 
-            onClick={() => exportTransactions('csv')}
-            disabled={transactions.length === 0}
-          >
-            <Download className="w-4 h-4 mr-2" />
-            Export Transactions CSV
-          </Button>
-          <Button 
-            variant="outline" 
-            onClick={() => fileInputRef?.click()}
-          >
-            <Upload className="w-4 h-4 mr-2" />
-            Import Stock
-          </Button>
-          <input
-            ref={setFileInputRef}
-            type="file"
-            accept=".csv,.json"
-            onChange={handleFileImport}
-            style={{ display: 'none' }}
-          />
-        </div>
+        <Button onClick={() => setShowAddForm(!showAddForm)}>
+          <Plus className="w-4 h-4 mr-2" />
+          Add Stock Item
+        </Button>
       </div>
+
+      {/* Add New Item Form */}
+      {showAddForm && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Add New Stock Item</CardTitle>
+            <CardDescription>Add a new item directly to stock inventory</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleAddNewItem} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="itemName">Item Name *</Label>
+                  <Input
+                    id="itemName"
+                    value={addItemForm.itemName}
+                    onChange={(e) => setAddItemForm({ ...addItemForm, itemName: e.target.value })}
+                    placeholder="Enter item name"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="totalQuantity">Total Quantity *</Label>
+                  <Input
+                    id="totalQuantity"
+                    type="number"
+                    value={addItemForm.totalQuantity}
+                    onChange={(e) => setAddItemForm({ ...addItemForm, totalQuantity: e.target.value })}
+                    placeholder="Enter quantity"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="location">Location *</Label>
+                  <Input
+                    id="location"
+                    value={addItemForm.location}
+                    onChange={(e) => setAddItemForm({ ...addItemForm, location: e.target.value })}
+                    placeholder="Storage location"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="purchasePrice">Purchase Price *</Label>
+                  <Input
+                    id="purchasePrice"
+                    type="number"
+                    step="0.01"
+                    value={addItemForm.purchasePrice}
+                    onChange={(e) => setAddItemForm({ ...addItemForm, purchasePrice: e.target.value })}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="courseTag">Course Tag</Label>
+                  <Input
+                    id="courseTag"
+                    value={addItemForm.courseTag}
+                    onChange={(e) => setAddItemForm({ ...addItemForm, courseTag: e.target.value })}
+                    placeholder="e.g., Chemistry, Physics"
+                  />
+                </div>
+              </div>
+              
+              <div className="flex gap-2">
+                <Button type="submit">Add Item</Button>
+                <Button type="button" variant="outline" onClick={() => setShowAddForm(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Stock Items Table */}
       <Card>
@@ -343,227 +251,114 @@ export default function StockManagement() {
             <div className="text-center py-8">
               <Package className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
               <p className="text-muted-foreground">
-                No stock items yet. Items will appear here when purchase orders are marked as "arrived".
+                No stock items yet. Add items directly or mark purchase orders as "arrived".
               </p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Item Name</TableHead>
-                  <TableHead>Available</TableHead>
-                  <TableHead>Total</TableHead>
-                  <TableHead>Location</TableHead>
-                  <TableHead>Course</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Present</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {stockItems.map((item) => {
-                  const status = getStockStatus(item);
-                  const recentTransactions = getItemTransactions(item.id);
-                  
-                  return (
-                    <TableRow key={item.id}>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium">{item.itemName}</p>
-                          <p className="text-sm text-muted-foreground">
-                            Purchase price: ${item.purchasePrice.toFixed(2)}
-                          </p>
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-bold">{item.availableQuantity}</TableCell>
-                      <TableCell>{item.totalQuantity}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center">
-                          <MapPin className="w-4 h-4 mr-1 text-muted-foreground" />
-                          {item.location}
-                        </div>
-                      </TableCell>
-                      <TableCell>{item.courseTag || '-'}</TableCell>
-                      <TableCell>
-                        <span className={status.color}>{status.status}</span>
-                      </TableCell>
-                      <TableCell>
-                        {item.isPresent ? (
-                          <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
-                            <CheckCircle className="w-4 h-4" />
-                            <span className="text-xs">
-                              {item.lastChecked ? new Date(item.lastChecked).toLocaleDateString() : 'Present'}
-                            </span>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Item Name</TableHead>
+                    <TableHead>Available</TableHead>
+                    <TableHead>Total</TableHead>
+                    <TableHead>Location</TableHead>
+                    <TableHead>Course</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {stockItems.map((item) => {
+                    const status = getStockStatus(item);
+                    
+                    return (
+                      <TableRow key={item.id}>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{item.itemName}</p>
+                            <p className="text-sm text-muted-foreground">
+                              Purchase price: ${item.purchasePrice.toFixed(2)}
+                            </p>
                           </div>
-                        ) : (
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => recordPresent(item.id)}
-                          >
-                            <CheckCircle className="w-4 h-4 mr-1" />
-                            Record Present
-                          </Button>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
-                          <Dialog>
-                            <DialogTrigger asChild>
-                              <Button 
-                                variant="outline" 
-                                size="sm"
-                                onClick={() => setSelectedItem(item)}
-                              >
-                                <Plus className="w-4 h-4 mr-1" />
-                                In
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent>
-                              <DialogHeader>
-                                <DialogTitle>Stock In</DialogTitle>
-                                <DialogDescription>
-                                  Add items to stock for {item.itemName}
-                                </DialogDescription>
-                              </DialogHeader>
-                              <form onSubmit={handleTransaction} className="space-y-4">
-                                <input type="hidden" value="in" onChange={() => setTransactionForm({...transactionForm, type: 'in'})} />
-                                <div>
-                                  <Label htmlFor="quantity">Quantity</Label>
-                                   <Input
-                                     id="quantity"
-                                     value={transactionForm.quantity}
-                                     onChange={(e) => setTransactionForm({...transactionForm, quantity: e.target.value})}
-                                     placeholder="Enter quantity"
-                                   />
-                                </div>
-                                <div>
-                                  <Label htmlFor="reason">Reason</Label>
-                                  <Input
-                                    id="reason"
-                                    value={transactionForm.reason}
-                                    onChange={(e) => setTransactionForm({...transactionForm, reason: e.target.value})}
-                                    placeholder="e.g., New purchase, Return"
-                                  />
-                                </div>
-                                <div>
-                                  <Label htmlFor="performedBy">Performed By</Label>
-                                  <Input
-                                    id="performedBy"
-                                    value={transactionForm.performedBy}
-                                    onChange={(e) => setTransactionForm({...transactionForm, performedBy: e.target.value})}
-                                    placeholder="Your name"
-                                  />
-                                </div>
-                                <Button type="submit" className="w-full">Add to Stock</Button>
-                              </form>
-                            </DialogContent>
-                          </Dialog>
-
-                          <Dialog>
-                            <DialogTrigger asChild>
-                              <Button 
-                                variant="outline" 
-                                size="sm"
-                                onClick={() => setSelectedItem(item)}
-                                disabled={item.availableQuantity === 0}
-                              >
-                                <Minus className="w-4 h-4 mr-1" />
-                                Out
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent>
-                              <DialogHeader>
-                                <DialogTitle>Stock Out</DialogTitle>
-                                <DialogDescription>
-                                  Remove items from stock for {item.itemName} (Available: {item.availableQuantity})
-                                </DialogDescription>
-                              </DialogHeader>
-                              <form onSubmit={(e) => {
-                                setTransactionForm({...transactionForm, type: 'out'});
-                                handleTransaction(e);
-                              }} className="space-y-4">
-                                <div>
-                                  <Label htmlFor="quantity">Quantity</Label>
-                                   <Input
-                                     id="quantity"
-                                     value={transactionForm.quantity}
-                                     onChange={(e) => setTransactionForm({...transactionForm, quantity: e.target.value})}
-                                     placeholder="Enter quantity"
-                                   />
-                                </div>
-                                <div>
-                                  <Label htmlFor="reason">Reason</Label>
-                                  <Input
-                                    id="reason"
-                                    value={transactionForm.reason}
-                                    onChange={(e) => setTransactionForm({...transactionForm, reason: e.target.value})}
-                                    placeholder="e.g., Used in class, Damaged"
-                                  />
-                                </div>
-                                <div>
-                                  <Label htmlFor="performedBy">Performed By</Label>
-                                  <Input
-                                    id="performedBy"
-                                    value={transactionForm.performedBy}
-                                    onChange={(e) => setTransactionForm({...transactionForm, performedBy: e.target.value})}
-                                    placeholder="Your name"
-                                  />
-                                </div>
-                                <Button type="submit" variant="destructive" className="w-full">
-                                  Remove from Stock
+                        </TableCell>
+                        <TableCell className="font-bold">{item.availableQuantity}</TableCell>
+                        <TableCell>{item.totalQuantity}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center">
+                            <MapPin className="w-4 h-4 mr-1 text-muted-foreground" />
+                            {item.location}
+                          </div>
+                        </TableCell>
+                        <TableCell>{item.courseTag || '-'}</TableCell>
+                        <TableCell>
+                          <span className={status.color}>{status.status}</span>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Dialog>
+                              <DialogTrigger asChild>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={() => {
+                                    setSelectedItem(item);
+                                    setTransactionForm(prev => ({ ...prev, type: 'in' }));
+                                  }}
+                                >
+                                  <Plus className="w-4 h-4 mr-1" />
+                                  Add
                                 </Button>
-                              </form>
-                            </DialogContent>
-                          </Dialog>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                              </DialogTrigger>
+                              <DialogContent>
+                                <DialogHeader>
+                                  <DialogTitle>Add Stock</DialogTitle>
+                                  <DialogDescription>
+                                    Add items to stock for {item.itemName}
+                                  </DialogDescription>
+                                </DialogHeader>
+                                <form onSubmit={handleTransaction} className="space-y-4">
+                                  <div>
+                                    <Label htmlFor="quantity">Quantity</Label>
+                                    <Input
+                                      id="quantity"
+                                      type="number"
+                                      value={transactionForm.quantity}
+                                      onChange={(e) => setTransactionForm({...transactionForm, quantity: e.target.value})}
+                                      placeholder="Enter quantity"
+                                    />
+                                  </div>
+                                  <div>
+                                    <Label htmlFor="reason">Reason</Label>
+                                    <Input
+                                      id="reason"
+                                      value={transactionForm.reason}
+                                      onChange={(e) => setTransactionForm({...transactionForm, reason: e.target.value})}
+                                      placeholder="e.g., New purchase, Return"
+                                    />
+                                  </div>
+                                  <div>
+                                    <Label htmlFor="performedBy">Performed By</Label>
+                                    <Input
+                                      id="performedBy"
+                                      value={transactionForm.performedBy}
+                                      onChange={(e) => setTransactionForm({...transactionForm, performedBy: e.target.value})}
+                                      placeholder="Your name"
+                                    />
+                                  </div>
+                                  <Button type="submit" className="w-full">Add to Stock</Button>
+                                </form>
+                              </DialogContent>
+                            </Dialog>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           )}
-        </CardContent>
-      </Card>
-
-      {/* Update Location */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Update Item Location</CardTitle>
-          <CardDescription>Change the storage location of stock items</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={updateLocation} className="flex gap-4 items-end">
-            <div className="flex-1">
-              <Label htmlFor="itemSelect">Select Item</Label>
-              <Select value={locationForm.itemId} onValueChange={(value) => setLocationForm({...locationForm, itemId: value})}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose an item" />
-                </SelectTrigger>
-                <SelectContent>
-                  {stockItems.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>
-                      {item.itemName} - {item.location}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex-1">
-              <Label htmlFor="newLocation">New Location</Label>
-              <Input
-                id="newLocation"
-                value={locationForm.newLocation}
-                onChange={(e) => setLocationForm({...locationForm, newLocation: e.target.value})}
-                placeholder="e.g., Room 101, Storage A"
-              />
-            </div>
-            <Button type="submit">
-              <Edit className="w-4 h-4 mr-2" />
-              Update Location
-            </Button>
-          </form>
         </CardContent>
       </Card>
     </div>

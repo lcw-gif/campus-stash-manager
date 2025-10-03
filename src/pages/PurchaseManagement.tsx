@@ -13,9 +13,14 @@ import { Plus, ExternalLink, Package, Download, Upload, CheckCircle } from 'luci
 import { useToast } from '@/hooks/use-toast';
 import { exportToCsv, exportToJson, parseCSV, convertCsvToPurchaseItems, readFileAsText } from '@/lib/fileUtils';
 
+import { DuplicateItemDialog } from '@/components/DuplicateItemDialog';
+
 export default function PurchaseManagement() {
   const [purchaseItems, setPurchaseItems] = useState<PurchaseItem[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [isDuplicateDialogOpen, setIsDuplicateDialogOpen] = useState(false);
+  const [duplicateItems, setDuplicateItems] = useState<PurchaseItem[]>([]);
+  const [pendingItem, setPendingItem] = useState<any>(null);
   const [formData, setFormData] = useState({
     itemName: '',
     whereToBuy: '',
@@ -39,39 +44,60 @@ export default function PurchaseManagement() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.itemName || !formData.whereToBuy || !formData.price || !formData.quantity) {
+    if (!formData.itemName || !formData.price || !formData.quantity) {
       toast({
         title: "Error",
-        description: "Please fill in all required fields.",
+        description: "Please fill in all required fields (Item Name, Price, Quantity).",
         variant: "destructive",
       });
       return;
     }
 
     // Check for duplicate item names
-    const existingItem = purchaseItems.find(item => 
+    const existingItems = purchaseItems.filter(item => 
       item.itemName.toLowerCase() === formData.itemName.toLowerCase()
     );
     
-    if (existingItem) {
-      toast({
-        title: "Duplicate Item",
-        description: "An item with this name already exists in purchase management.",
-        variant: "destructive",
+    if (existingItems.length > 0) {
+      // Show duplicate dialog
+      setDuplicateItems(existingItems);
+      setPendingItem({
+        itemName: formData.itemName,
+        whereToBuy: formData.whereToBuy || 'Not specified',
+        price: parseFloat(formData.price),
+        quantity: parseInt(formData.quantity),
+        link: formData.link,
+        status: formData.status,
+        courseTag: formData.courseTag,
       });
+      setIsDuplicateDialogOpen(true);
       return;
     }
+
+    addNewItem();
+  };
+
+  const addNewItem = (itemData?: any) => {
+    const dataToUse = itemData || {
+      itemName: formData.itemName,
+      whereToBuy: formData.whereToBuy || 'Not specified',
+      price: parseFloat(formData.price),
+      quantity: parseInt(formData.quantity),
+      link: formData.link,
+      status: formData.status,
+      courseTag: formData.courseTag,
+    };
 
     const newItem: PurchaseItem = {
       id: Date.now().toString(),
       itemId: generateItemId(),
-      itemName: formData.itemName,
-      whereToBuy: formData.whereToBuy,
-      price: parseFloat(formData.price),
-      quantity: parseInt(formData.quantity),
-      link: formData.link || undefined,
-      status: formData.status,
-      courseTag: formData.courseTag || undefined,
+      itemName: dataToUse.itemName,
+      whereToBuy: dataToUse.whereToBuy,
+      price: dataToUse.price,
+      quantity: dataToUse.quantity,
+      link: dataToUse.link || undefined,
+      status: dataToUse.status,
+      courseTag: dataToUse.courseTag || undefined,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -95,6 +121,13 @@ export default function PurchaseManagement() {
       title: "Success",
       description: "Purchase item added successfully!",
     });
+  };
+
+  const handleDuplicateConfirm = () => {
+    addNewItem(pendingItem);
+    setIsDuplicateDialogOpen(false);
+    setPendingItem(null);
+    setDuplicateItems([]);
   };
 
   const updateItemStatus = (id: string, newStatus: PurchaseStatus) => {
@@ -358,12 +391,12 @@ export default function PurchaseManagement() {
                 </div>
                 
                 <div>
-                  <Label htmlFor="whereToBuy">Where to Buy *</Label>
+                  <Label htmlFor="whereToBuy">Where to Buy</Label>
                   <Input
                     id="whereToBuy"
                     value={formData.whereToBuy}
                     onChange={(e) => setFormData({ ...formData, whereToBuy: e.target.value })}
-                    placeholder="Store or supplier name"
+                    placeholder="Store or supplier name (optional)"
                   />
                 </div>
                 
@@ -546,6 +579,19 @@ export default function PurchaseManagement() {
           )}
         </CardContent>
       </Card>
+
+      {/* Duplicate Item Dialog */}
+      <DuplicateItemDialog
+        isOpen={isDuplicateDialogOpen}
+        onClose={() => {
+          setIsDuplicateDialogOpen(false);
+          setPendingItem(null);
+          setDuplicateItems([]);
+        }}
+        onConfirm={handleDuplicateConfirm}
+        existingItems={duplicateItems}
+        newItem={pendingItem || { itemName: '', whereToBuy: '', price: 0, quantity: 0 }}
+      />
     </div>
   );
 }

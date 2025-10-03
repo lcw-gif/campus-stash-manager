@@ -10,12 +10,13 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarIcon, Plus, ArrowLeftRight, Search, CheckCircle2, Clock } from 'lucide-react';
+import { CalendarIcon, Plus, ArrowLeftRight, Search, CheckCircle2, Clock, Scan } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { BorrowRecord, StockItem, BorrowStatus } from '@/types/stock';
 import { loadBorrowRecords, saveBorrowRecords, loadStockItems, saveStockItems } from '@/lib/storage';
+import { BarcodeScanner } from '@/components/BarcodeScanner';
 
 export default function BorrowManagement() {
   const [borrowRecords, setBorrowRecords] = useState<BorrowRecord[]>([]);
@@ -25,6 +26,7 @@ export default function BorrowManagement() {
   const [selectedRecord, setSelectedRecord] = useState<BorrowRecord | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | BorrowStatus>('all');
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
   const { toast } = useToast();
 
   // Form state
@@ -161,6 +163,28 @@ export default function BorrowManagement() {
 
   const availableStockItems = stockItems.filter(item => item.availableQuantity > 0);
 
+  const handleBarcodeScan = (result: string) => {
+    // Try to find item by name or ID
+    const foundItem = availableStockItems.find(item => 
+      item.itemName.toLowerCase().includes(result.toLowerCase()) ||
+      item.id === result
+    );
+    
+    if (foundItem) {
+      setFormData(prev => ({ ...prev, stockItemId: foundItem.id }));
+      toast({
+        title: "Item Found",
+        description: `Selected: ${foundItem.itemName}`,
+      });
+    } else {
+      toast({
+        title: "Item Not Found",
+        description: "No matching item found for this barcode",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -169,145 +193,166 @@ export default function BorrowManagement() {
           <p className="text-sm sm:text-base text-muted-foreground">Track borrowed items and returns</p>
         </div>
         
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="w-full sm:w-auto">
-              <Plus className="w-4 h-4 mr-2" />
-              Add Borrow Record
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Add New Borrow Record</DialogTitle>
-              <DialogDescription>
-                Record a new item borrow
-              </DialogDescription>
-            </DialogHeader>
-            
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="stockItem">Stock Item</Label>
-                <Select
-                  value={formData.stockItemId}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, stockItemId: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select an item to borrow" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableStockItems.map((item) => (
-                      <SelectItem key={item.id} value={item.id}>
-                        {item.itemName} (Available: {item.availableQuantity})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="borrowerName">Borrower Name *</Label>
-                <Input
-                  id="borrowerName"
-                  value={formData.borrowerName}
-                  onChange={(e) => setFormData(prev => ({ ...prev, borrowerName: e.target.value }))}
-                  placeholder="Enter borrower name"
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="borrowerContact">Borrower Contact</Label>
-                <Input
-                  id="borrowerContact"
-                  value={formData.borrowerContact}
-                  onChange={(e) => setFormData(prev => ({ ...prev, borrowerContact: e.target.value }))}
-                  placeholder="Phone number or email"
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="quantity">Quantity</Label>
-                <Input
-                  id="quantity"
-                  type="number"
-                  min="1"
-                  value={formData.quantity}
-                  onChange={(e) => setFormData(prev => ({ ...prev, quantity: parseInt(e.target.value) || 1 }))}
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <Label>Borrow Date *</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "justify-start text-left font-normal",
-                        !formData.borrowDate && "text-muted-foreground"
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {formData.borrowDate ? format(formData.borrowDate, "PPP") : "Pick a date"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={formData.borrowDate}
-                      onSelect={(date) => setFormData(prev => ({ ...prev, borrowDate: date || new Date() }))}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-
-              <div className="grid gap-2">
-                <Label>Expected Return Date</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "justify-start text-left font-normal",
-                        !formData.expectedReturnDate && "text-muted-foreground"
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {formData.expectedReturnDate ? format(formData.expectedReturnDate, "PPP") : "Pick a date (optional)"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={formData.expectedReturnDate}
-                      onSelect={(date) => setFormData(prev => ({ ...prev, expectedReturnDate: date }))}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="notes">Notes</Label>
-                <Textarea
-                  id="notes"
-                  value={formData.notes}
-                  onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-                  placeholder="Additional notes (optional)"
-                />
-              </div>
-            </div>
-
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="button" onClick={handleAddBorrow}>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="w-full sm:w-auto">
+                <Plus className="w-4 h-4 mr-2" />
                 Add Borrow Record
               </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Add New Borrow Record</DialogTitle>
+                <DialogDescription>
+                  Record a new item borrow
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="stockItem">Stock Item</Label>
+                  <div className="flex gap-2">
+                    <Select
+                      value={formData.stockItemId}
+                      onValueChange={(value) => setFormData(prev => ({ ...prev, stockItemId: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select an item to borrow" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableStockItems.map((item) => (
+                          <SelectItem key={item.id} value={item.id}>
+                            {item.itemName} (Available: {item.availableQuantity})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsScannerOpen(true)}
+                    >
+                      <Scan className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="borrowerName">Borrower Name *</Label>
+                  <Input
+                    id="borrowerName"
+                    value={formData.borrowerName}
+                    onChange={(e) => setFormData(prev => ({ ...prev, borrowerName: e.target.value }))}
+                    placeholder="Enter borrower name"
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="borrowerContact">Borrower Contact</Label>
+                  <Input
+                    id="borrowerContact"
+                    value={formData.borrowerContact}
+                    onChange={(e) => setFormData(prev => ({ ...prev, borrowerContact: e.target.value }))}
+                    placeholder="Phone number or email"
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="quantity">Quantity</Label>
+                  <Input
+                    id="quantity"
+                    type="number"
+                    min="1"
+                    value={formData.quantity}
+                    onChange={(e) => setFormData(prev => ({ ...prev, quantity: parseInt(e.target.value) || 1 }))}
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label>Borrow Date *</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "justify-start text-left font-normal",
+                          !formData.borrowDate && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {formData.borrowDate ? format(formData.borrowDate, "PPP") : "Pick a date"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={formData.borrowDate}
+                        onSelect={(date) => setFormData(prev => ({ ...prev, borrowDate: date || new Date() }))}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label>Expected Return Date</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "justify-start text-left font-normal",
+                          !formData.expectedReturnDate && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {formData.expectedReturnDate ? format(formData.expectedReturnDate, "PPP") : "Pick a date (optional)"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={formData.expectedReturnDate}
+                        onSelect={(date) => setFormData(prev => ({ ...prev, expectedReturnDate: date }))}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="notes">Notes</Label>
+                  <Textarea
+                    id="notes"
+                    value={formData.notes}
+                    onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                    placeholder="Additional notes (optional)"
+                  />
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="button" onClick={handleAddBorrow}>
+                  Add Borrow Record
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          
+          <Button 
+            variant="outline" 
+            className="w-full sm:w-auto"
+            onClick={() => setIsScannerOpen(true)}
+          >
+            <Scan className="w-4 h-4 mr-2" />
+            Scan Barcode
+          </Button>
+        </div>
       </div>
 
       {/* Search and Filters */}
@@ -457,6 +502,13 @@ export default function BorrowManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      
+      {/* Barcode Scanner */}
+      <BarcodeScanner
+        isOpen={isScannerOpen}
+        onClose={() => setIsScannerOpen(false)}
+        onScan={handleBarcodeScan}
+      />
     </div>
   );
 }
