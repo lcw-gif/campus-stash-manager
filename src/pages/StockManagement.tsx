@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { StockItem, StockTransaction } from '@/types/stock';
 import { loadStockItems, saveStockItems, loadStockTransactions, saveStockTransactions } from '@/lib/storage';
-import { Package, Plus, Minus, MapPin, Download, Upload, CheckCircle } from 'lucide-react';
+import { Package, Plus, Minus, MapPin, Download, Upload, CheckCircle, Edit } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { exportToCsv, exportToJson, parseCSV, convertCsvToStockItems, readFileAsText } from '@/lib/fileUtils';
 
@@ -303,30 +303,63 @@ export default function StockManagement() {
                                   size="sm"
                                   onClick={() => {
                                     setSelectedItem(item);
-                                    setTransactionForm(prev => ({ ...prev, type: 'in' }));
+                                    setTransactionForm(prev => ({ ...prev, type: 'in', quantity: '', reason: '', performedBy: '' }));
                                   }}
                                 >
-                                  <Plus className="w-4 h-4 mr-1" />
-                                  Add
+                                  <Edit className="w-4 h-4 mr-1" />
+                                  Edit
                                 </Button>
                               </DialogTrigger>
                               <DialogContent>
                                 <DialogHeader>
-                                  <DialogTitle>Add Stock</DialogTitle>
+                                  <DialogTitle>Edit Stock</DialogTitle>
                                   <DialogDescription>
-                                    Add items to stock for {item.itemName}
+                                    Add or deduct stock for {item.itemName}
                                   </DialogDescription>
                                 </DialogHeader>
                                 <form onSubmit={handleTransaction} className="space-y-4">
+                                  <div>
+                                    <Label htmlFor="transactionType">Transaction Type</Label>
+                                    <Select
+                                      value={transactionForm.type}
+                                      onValueChange={(value: 'in' | 'out') => 
+                                        setTransactionForm({...transactionForm, type: value})
+                                      }
+                                    >
+                                      <SelectTrigger>
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="in">
+                                          <div className="flex items-center">
+                                            <Plus className="w-4 h-4 mr-2" />
+                                            Add Stock
+                                          </div>
+                                        </SelectItem>
+                                        <SelectItem value="out">
+                                          <div className="flex items-center">
+                                            <Minus className="w-4 h-4 mr-2" />
+                                            Deduct Stock
+                                          </div>
+                                        </SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
                                   <div>
                                     <Label htmlFor="quantity">Quantity</Label>
                                     <Input
                                       id="quantity"
                                       type="number"
+                                      min="1"
                                       value={transactionForm.quantity}
                                       onChange={(e) => setTransactionForm({...transactionForm, quantity: e.target.value})}
                                       placeholder="Enter quantity"
                                     />
+                                    {transactionForm.type === 'out' && (
+                                      <p className="text-sm text-muted-foreground mt-1">
+                                        Available: {item.availableQuantity}
+                                      </p>
+                                    )}
                                   </div>
                                   <div>
                                     <Label htmlFor="reason">Reason</Label>
@@ -334,7 +367,7 @@ export default function StockManagement() {
                                       id="reason"
                                       value={transactionForm.reason}
                                       onChange={(e) => setTransactionForm({...transactionForm, reason: e.target.value})}
-                                      placeholder="e.g., New purchase, Return"
+                                      placeholder={transactionForm.type === 'in' ? 'e.g., New purchase, Return' : 'e.g., Damaged, Used, Lost'}
                                     />
                                   </div>
                                   <div>
@@ -346,7 +379,9 @@ export default function StockManagement() {
                                       placeholder="Your name"
                                     />
                                   </div>
-                                  <Button type="submit" className="w-full">Add to Stock</Button>
+                                  <Button type="submit" className="w-full">
+                                    {transactionForm.type === 'in' ? 'Add to Stock' : 'Deduct from Stock'}
+                                  </Button>
                                 </form>
                               </DialogContent>
                             </Dialog>
