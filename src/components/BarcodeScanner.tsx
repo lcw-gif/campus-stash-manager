@@ -54,16 +54,20 @@ export function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScannerProps)
       const interval = setInterval(scanBarcode, 1000);
       return () => {
         clearInterval(interval);
-        if (codeReader.current) {
-          codeReader.current.reset();
+        // Clean up video stream
+        if (webcamRef.current?.video) {
+          const stream = webcamRef.current.video.srcObject as MediaStream;
+          stream?.getTracks().forEach(track => track.stop());
         }
       };
     }
   }, [isOpen, onScan, onClose]);
 
   const handleClose = () => {
-    if (codeReader.current) {
-      codeReader.current.reset();
+    // Clean up video stream
+    if (webcamRef.current?.video) {
+      const stream = webcamRef.current.video.srcObject as MediaStream;
+      stream?.getTracks().forEach(track => track.stop());
     }
     setIsScanning(false);
     onClose();
