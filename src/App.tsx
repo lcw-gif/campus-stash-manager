@@ -11,6 +11,7 @@ import StockTake from "./pages/StockTake";
 import BorrowManagement from "./pages/BorrowManagement";
 import TransactionHistory from "./pages/TransactionHistory";
 import SearchPage from "./pages/SearchPage";
+import CourseManagement from "./pages/CourseManagement";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -30,6 +31,7 @@ const App = () => (
               <Route path="/stock" element={<StockManagement />} />
               <Route path="/stock-take" element={<StockTake />} />
               <Route path="/borrow" element={<BorrowManagement />} />
+              <Route path="/courses" element={<CourseManagement />} />
               <Route path="/history" element={<TransactionHistory />} />
               <Route path="/search" element={<SearchPage />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

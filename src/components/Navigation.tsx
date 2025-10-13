@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Package, ShoppingCart, BarChart3, Search, History, ArrowLeftRight, ClipboardCheck } from 'lucide-react';
+import { Package, ShoppingCart, BarChart3, Search, History, ArrowLeftRight, ClipboardCheck, GraduationCap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
@@ -8,6 +8,7 @@ const navItems = [
   { name: 'Stock Management', href: '/stock', icon: Package },
   { name: 'Stock Take', href: '/stock-take', icon: ClipboardCheck },
   { name: 'Borrow Management', href: '/borrow', icon: ArrowLeftRight },
+  { name: 'Course Management', href: '/courses', icon: GraduationCap },
   { name: 'Transaction History', href: '/history', icon: History },
   { name: 'Search', href: '/search', icon: Search },
 ];
