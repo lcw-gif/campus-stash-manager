@@ -226,7 +226,7 @@ export default function StockTake() {
     });
 
     const buffer = await Packer.toBuffer(doc);
-    const blob = new Blob([buffer], { 
+    const blob = new Blob([buffer as BlobPart], { 
       type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' 
     });
     

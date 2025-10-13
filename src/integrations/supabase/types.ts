@@ -14,7 +14,86 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      course_items: {
+        Row: {
+          course_id: string
+          created_at: string
+          id: string
+          item_name: string
+          notes: string | null
+          quantity_outstocked: number
+          quantity_reserved: number
+          quantity_returned: number
+          status: Database["public"]["Enums"]["course_item_status"]
+          updated_at: string
+        }
+        Insert: {
+          course_id: string
+          created_at?: string
+          id?: string
+          item_name: string
+          notes?: string | null
+          quantity_outstocked?: number
+          quantity_reserved: number
+          quantity_returned?: number
+          status?: Database["public"]["Enums"]["course_item_status"]
+          updated_at?: string
+        }
+        Update: {
+          course_id?: string
+          created_at?: string
+          id?: string
+          item_name?: string
+          notes?: string | null
+          quantity_outstocked?: number
+          quantity_reserved?: number
+          quantity_returned?: number
+          status?: Database["public"]["Enums"]["course_item_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "course_items_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      courses: {
+        Row: {
+          course_date: string
+          course_name: string
+          created_at: string
+          description: string | null
+          id: string
+          instructor: string | null
+          status: Database["public"]["Enums"]["course_status"]
+          updated_at: string
+        }
+        Insert: {
+          course_date: string
+          course_name: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          instructor?: string | null
+          status?: Database["public"]["Enums"]["course_status"]
+          updated_at?: string
+        }
+        Update: {
+          course_date?: string
+          course_name?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          instructor?: string | null
+          status?: Database["public"]["Enums"]["course_status"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +102,8 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      course_item_status: "reserved" | "returned" | "outstocked" | "partial"
+      course_status: "planned" | "in_progress" | "completed" | "cancelled"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +230,9 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      course_item_status: ["reserved", "returned", "outstocked", "partial"],
+      course_status: ["planned", "in_progress", "completed", "cancelled"],
+    },
   },
 } as const
