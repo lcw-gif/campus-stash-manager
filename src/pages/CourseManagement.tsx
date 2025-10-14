@@ -11,6 +11,8 @@ import { Badge } from '@/components/ui/badge';
 import { Plus, Edit, Trash2, Package, RefreshCw, MinusCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { courseSchema, courseItemSchema } from '@/lib/validationSchemas';
+import { z } from 'zod';
 
 type CourseStatus = 'planned' | 'in_progress' | 'completed' | 'cancelled';
 type CourseItemStatus = 'reserved' | 'returned' | 'outstocked' | 'partial';
@@ -110,82 +112,96 @@ export default function CourseManagement() {
   };
 
   const handleAddCourse = async () => {
-    if (!courseForm.course_name || !courseForm.course_date) {
-      toast({
-        title: "Validation Error",
-        description: "Course name and date are required",
-        variant: "destructive",
-      });
-      return;
-    }
+    try {
+      const validated = courseSchema.parse(courseForm);
 
-    const { data, error } = await supabase
-      .from('courses')
-      .insert([courseForm])
-      .select();
+      const { data, error } = await supabase
+        .from('courses')
+        .insert([{
+          course_name: validated.course_name,
+          description: validated.description || '',
+          course_date: validated.course_date,
+          instructor: validated.instructor || '',
+          status: validated.status,
+        }])
+        .select();
 
-    if (error) {
-      toast({
-        title: "Error",
-        description: "Failed to create course",
-        variant: "destructive",
-      });
-    } else {
-      toast({
-        title: "Success",
-        description: "Course created successfully",
-      });
-      setCourseForm({
-        course_name: '',
-        description: '',
-        course_date: '',
-        instructor: '',
-        status: 'planned',
-      });
-      setIsAddCourseOpen(false);
-      loadCourses();
+      if (error) {
+        toast({
+          title: "Error",
+          description: "Failed to create course",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: "Course created successfully",
+        });
+        setCourseForm({
+          course_name: '',
+          description: '',
+          course_date: '',
+          instructor: '',
+          status: 'planned',
+        });
+        setIsAddCourseOpen(false);
+        loadCourses();
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        toast({
+          title: "Validation Error",
+          description: error.errors[0].message,
+          variant: "destructive",
+        });
+      }
     }
   };
 
   const handleAddItem = async () => {
     if (!selectedCourse) return;
     
-    if (!itemForm.item_name || itemForm.quantity_reserved <= 0) {
-      toast({
-        title: "Validation Error",
-        description: "Item name and quantity (>0) are required",
-        variant: "destructive",
-      });
-      return;
-    }
+    try {
+      const validated = courseItemSchema.parse(itemForm);
 
-    const { data, error } = await supabase
-      .from('course_items')
-      .insert([{
-        course_id: selectedCourse.id,
-        ...itemForm,
-        status: 'reserved' as CourseItemStatus,
-      }])
-      .select();
+      const { data, error } = await supabase
+        .from('course_items')
+        .insert([{
+          course_id: selectedCourse.id,
+          item_name: validated.item_name,
+          quantity_reserved: validated.quantity_reserved,
+          notes: validated.notes || '',
+          status: 'reserved' as CourseItemStatus,
+        }])
+        .select();
 
-    if (error) {
-      toast({
-        title: "Error",
-        description: "Failed to add item",
-        variant: "destructive",
-      });
-    } else {
-      toast({
-        title: "Success",
-        description: "Item added to course",
-      });
-      setItemForm({
-        item_name: '',
-        quantity_reserved: 0,
-        notes: '',
-      });
-      setIsAddItemOpen(false);
-      loadCourseItems(selectedCourse.id);
+      if (error) {
+        toast({
+          title: "Error",
+          description: "Failed to add item",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: "Item added to course",
+        });
+        setItemForm({
+          item_name: '',
+          quantity_reserved: 0,
+          notes: '',
+        });
+        setIsAddItemOpen(false);
+        loadCourseItems(selectedCourse.id);
+      }
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        toast({
+          title: "Validation Error",
+          description: error.errors[0].message,
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -344,6 +360,7 @@ export default function CourseManagement() {
                   value={courseForm.course_name}
                   onChange={(e) => setCourseForm({ ...courseForm, course_name: e.target.value })}
                   placeholder="e.g., Arduino Workshop"
+                  maxLength={100}
                 />
               </div>
               
@@ -354,6 +371,7 @@ export default function CourseManagement() {
                   value={courseForm.description}
                   onChange={(e) => setCourseForm({ ...courseForm, description: e.target.value })}
                   placeholder="Course details..."
+                  maxLength={500}
                 />
               </div>
               
@@ -374,6 +392,7 @@ export default function CourseManagement() {
                   value={courseForm.instructor}
                   onChange={(e) => setCourseForm({ ...courseForm, instructor: e.target.value })}
                   placeholder="Instructor name"
+                  maxLength={100}
                 />
               </div>
               
@@ -517,6 +536,7 @@ export default function CourseManagement() {
                           value={itemForm.item_name}
                           onChange={(e) => setItemForm({ ...itemForm, item_name: e.target.value })}
                           placeholder="e.g., Arduino Uno"
+                          maxLength={100}
                         />
                       </div>
                       
@@ -526,6 +546,7 @@ export default function CourseManagement() {
                           id="quantity"
                           type="number"
                           min="1"
+                          max="99999"
                           value={itemForm.quantity_reserved}
                           onChange={(e) => setItemForm({ ...itemForm, quantity_reserved: parseInt(e.target.value) || 0 })}
                         />
@@ -538,6 +559,7 @@ export default function CourseManagement() {
                           value={itemForm.notes}
                           onChange={(e) => setItemForm({ ...itemForm, notes: e.target.value })}
                           placeholder="Additional notes..."
+                          maxLength={500}
                         />
                       </div>
                     </div>
