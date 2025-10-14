@@ -241,6 +241,30 @@ export default function CourseManagement() {
     }
   };
 
+  const handleUpdateCourseStatus = async (courseId: string, newStatus: CourseStatus) => {
+    const { error } = await supabase
+      .from('courses')
+      .update({ status: newStatus })
+      .eq('id', courseId);
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update course status",
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "Success",
+        description: "Course status updated",
+      });
+      loadCourses();
+      if (selectedCourse?.id === courseId) {
+        setSelectedCourse({ ...selectedCourse, status: newStatus });
+      }
+    }
+  };
+
   const handleDeleteCourse = async (courseId: string) => {
     const { error } = await supabase
       .from('courses')
@@ -421,9 +445,27 @@ export default function CourseManagement() {
                         )}
                       </div>
                       <div className="flex items-center gap-2">
-                        <Badge className={getStatusColor(course.status)}>
-                          {course.status.replace('_', ' ')}
-                        </Badge>
+                        <Select
+                          value={course.status}
+                          onValueChange={(value: CourseStatus) => {
+                            handleUpdateCourseStatus(course.id, value);
+                          }}
+                        >
+                          <SelectTrigger 
+                            className="w-[140px] h-8"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Badge className={getStatusColor(course.status)}>
+                              {course.status.replace('_', ' ')}
+                            </Badge>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="planned">Planned</SelectItem>
+                            <SelectItem value="in_progress">In Progress</SelectItem>
+                            <SelectItem value="completed">Completed</SelectItem>
+                            <SelectItem value="cancelled">Cancelled</SelectItem>
+                          </SelectContent>
+                        </Select>
                         <Button
                           variant="ghost"
                           size="icon"
