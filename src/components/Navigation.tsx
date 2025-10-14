@@ -1,6 +1,10 @@
-import { Link, useLocation } from 'react-router-dom';
-import { Package, ShoppingCart, BarChart3, Search, History, ArrowLeftRight, ClipboardCheck, GraduationCap } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Package, ShoppingCart, BarChart3, Search, History, ArrowLeftRight, ClipboardCheck, GraduationCap, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useEffect, useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
 
 const navItems = [
   { name: 'Dashboard', href: '/', icon: BarChart3 },
@@ -15,6 +19,45 @@ const navItems = [
 
 export function Navigation() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    // Check current session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setIsAuthenticated(!!session);
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthenticated(!!session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Failed to logout",
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "Success",
+        description: "Logged out successfully",
+      });
+      navigate('/auth');
+    }
+  };
+
+  // Don't show navigation on auth page
+  if (location.pathname === '/auth') {
+    return null;
+  }
 
   return (
     <nav className="bg-card border-b border-border shadow-sm">
@@ -27,7 +70,7 @@ export function Navigation() {
             </div>
           </div>
           
-          <div className="flex space-x-8">
+          <div className="flex items-center space-x-8">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = location.pathname === item.href;
@@ -48,6 +91,18 @@ export function Navigation() {
                 </Link>
               );
             })}
+            
+            {isAuthenticated && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleLogout}
+                className="ml-4"
+              >
+                <LogOut className="w-4 h-4 mr-2" />
+                Logout
+              </Button>
+            )}
           </div>
         </div>
       </div>
