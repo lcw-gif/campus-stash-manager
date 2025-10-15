@@ -17,6 +17,8 @@ import { useToast } from '@/hooks/use-toast';
 import { BorrowRecord, StockItem, BorrowStatus } from '@/types/stock';
 import { loadBorrowRecords, saveBorrowRecords, loadStockItems, saveStockItems } from '@/lib/storage';
 import { BarcodeScanner } from '@/components/BarcodeScanner';
+import { borrowRecordSchema } from '@/lib/validationSchemas';
+import { z } from 'zod';
 
 export default function BorrowManagement() {
   const [borrowRecords, setBorrowRecords] = useState<BorrowRecord[]>([]);
@@ -56,68 +58,76 @@ export default function BorrowManagement() {
       return;
     }
 
-    if (formData.quantity > selectedStockItem.availableQuantity) {
-      toast({
-        title: "Error",
-        description: "Insufficient stock available",
-        variant: "destructive",
+    try {
+      const validated = borrowRecordSchema.parse({
+        borrowerName: formData.borrowerName,
+        borrowerContact: formData.borrowerContact,
+        quantity: formData.quantity,
+        notes: formData.notes,
       });
-      return;
-    }
 
-    if (!formData.borrowerName.trim()) {
+      if (validated.quantity > selectedStockItem.availableQuantity) {
+        toast({
+          title: "Error",
+          description: "Insufficient stock available",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const newBorrowRecord: BorrowRecord = {
+        id: `borrow-${Date.now()}`,
+        stockItemId: formData.stockItemId,
+        itemName: selectedStockItem.itemName,
+        borrowerName: validated.borrowerName,
+        borrowerContact: validated.borrowerContact || '',
+        quantity: validated.quantity,
+        borrowDate: formData.borrowDate,
+        expectedReturnDate: formData.expectedReturnDate,
+        status: 'borrowed',
+        notes: validated.notes || '',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const updatedRecords = [...borrowRecords, newBorrowRecord];
+      setBorrowRecords(updatedRecords);
+      saveBorrowRecords(updatedRecords);
+
+      // Update stock item available quantity
+      const updatedStockItems = stockItems.map(item =>
+        item.id === formData.stockItemId
+          ? { ...item, availableQuantity: item.availableQuantity - validated.quantity, updatedAt: new Date() }
+          : item
+      );
+      setStockItems(updatedStockItems);
+      saveStockItems(updatedStockItems);
+
       toast({
-        title: "Error",
-        description: "Please enter borrower name",
-        variant: "destructive",
+        title: "Success",
+        description: "Borrow record created successfully",
       });
-      return;
+
+      // Reset form
+      setFormData({
+        stockItemId: '',
+        borrowerName: '',
+        borrowerContact: '',
+        quantity: 1,
+        borrowDate: new Date(),
+        expectedReturnDate: undefined,
+        notes: '',
+      });
+      setIsAddDialogOpen(false);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        toast({
+          title: "Validation Error",
+          description: error.errors[0].message,
+          variant: "destructive",
+        });
+      }
     }
-
-    const newBorrowRecord: BorrowRecord = {
-      id: `borrow-${Date.now()}`,
-      stockItemId: formData.stockItemId,
-      itemName: selectedStockItem.itemName,
-      borrowerName: formData.borrowerName.trim(),
-      borrowerContact: formData.borrowerContact.trim(),
-      quantity: formData.quantity,
-      borrowDate: formData.borrowDate,
-      expectedReturnDate: formData.expectedReturnDate,
-      status: 'borrowed',
-      notes: formData.notes.trim(),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    const updatedRecords = [...borrowRecords, newBorrowRecord];
-    setBorrowRecords(updatedRecords);
-    saveBorrowRecords(updatedRecords);
-
-    // Update stock item available quantity
-    const updatedStockItems = stockItems.map(item =>
-      item.id === formData.stockItemId
-        ? { ...item, availableQuantity: item.availableQuantity - formData.quantity, updatedAt: new Date() }
-        : item
-    );
-    setStockItems(updatedStockItems);
-    saveStockItems(updatedStockItems);
-
-    toast({
-      title: "Success",
-      description: "Borrow record created successfully",
-    });
-
-    // Reset form
-    setFormData({
-      stockItemId: '',
-      borrowerName: '',
-      borrowerContact: '',
-      quantity: 1,
-      borrowDate: new Date(),
-      expectedReturnDate: undefined,
-      notes: '',
-    });
-    setIsAddDialogOpen(false);
   };
 
   const handleReturnItem = () => {

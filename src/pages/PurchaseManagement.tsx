@@ -12,7 +12,8 @@ import { loadPurchaseItems, savePurchaseItems, loadStockItems, saveStockItems } 
 import { Plus, ExternalLink, Package, Download, Upload, CheckCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { exportToCsv, exportToJson, parseCSV, convertCsvToPurchaseItems, readFileAsText } from '@/lib/fileUtils';
-
+import { purchaseItemSchema } from '@/lib/validationSchemas';
+import { z } from 'zod';
 import { DuplicateItemDialog } from '@/components/DuplicateItemDialog';
 
 export default function PurchaseManagement() {
@@ -44,37 +45,40 @@ export default function PurchaseManagement() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.itemName || !formData.price || !formData.quantity) {
-      toast({
-        title: "Error",
-        description: "Please fill in all required fields (Item Name, Price, Quantity).",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Check for duplicate item names
-    const existingItems = purchaseItems.filter(item => 
-      item.itemName.toLowerCase() === formData.itemName.toLowerCase()
-    );
-    
-    if (existingItems.length > 0) {
-      // Show duplicate dialog
-      setDuplicateItems(existingItems);
-      setPendingItem({
+    try {
+      const validated = purchaseItemSchema.parse({
         itemName: formData.itemName,
-        whereToBuy: formData.whereToBuy || 'Not specified',
-        price: parseFloat(formData.price),
-        quantity: parseInt(formData.quantity),
+        whereToBuy: formData.whereToBuy,
+        price: parseFloat(formData.price) || 0,
+        quantity: parseInt(formData.quantity) || 0,
         link: formData.link,
         status: formData.status,
         courseTag: formData.courseTag,
       });
-      setIsDuplicateDialogOpen(true);
-      return;
-    }
 
-    addNewItem();
+      // Check for duplicate item names
+      const existingItems = purchaseItems.filter(item => 
+        item.itemName.toLowerCase() === validated.itemName.toLowerCase()
+      );
+      
+      if (existingItems.length > 0) {
+        // Show duplicate dialog
+        setDuplicateItems(existingItems);
+        setPendingItem(validated);
+        setIsDuplicateDialogOpen(true);
+        return;
+      }
+
+      addNewItem();
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        toast({
+          title: "Validation Error",
+          description: error.errors[0].message,
+          variant: "destructive",
+        });
+      }
+    }
   };
 
   const addNewItem = (itemData?: any) => {

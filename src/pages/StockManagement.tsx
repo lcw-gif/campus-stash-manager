@@ -10,6 +10,8 @@ import { StockItem, StockTransaction } from '@/types/stock';
 import { loadStockItems, saveStockItems, loadStockTransactions, saveStockTransactions } from '@/lib/storage';
 import { Package, Plus, Minus, MapPin, Download, Upload, CheckCircle, Edit } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { stockItemSchema, stockTransactionSchema } from '@/lib/validationSchemas';
+import { z } from 'zod';
 import { exportToCsv, exportToJson, parseCSV, convertCsvToStockItems, readFileAsText } from '@/lib/fileUtils';
 
 export default function StockManagement() {
@@ -40,114 +42,147 @@ export default function StockManagement() {
   const handleAddNewItem = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!addItemForm.itemName || !addItemForm.totalQuantity || !addItemForm.location || !addItemForm.purchasePrice) {
-      toast({
-        title: "Error",
-        description: "Please fill in all required fields.",
-        variant: "destructive",
+    try {
+      const validated = stockItemSchema.parse({
+        itemName: addItemForm.itemName,
+        totalQuantity: parseInt(addItemForm.totalQuantity) || 0,
+        location: addItemForm.location,
+        courseTag: addItemForm.courseTag,
+        purchasePrice: parseFloat(addItemForm.purchasePrice) || 0,
       });
-      return;
+
+      const newStockItem: StockItem = {
+        id: Date.now().toString(),
+        itemName: validated.itemName,
+        totalQuantity: validated.totalQuantity,
+        availableQuantity: validated.totalQuantity,
+        location: validated.location,
+        courseTag: validated.courseTag,
+        purchasePrice: validated.purchasePrice,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const updatedItems = [...stockItems, newStockItem];
+      setStockItems(updatedItems);
+      saveStockItems(updatedItems);
+
+      setAddItemForm({
+        itemName: '',
+        totalQuantity: '',
+        location: '',
+        courseTag: '',
+        purchasePrice: '',
+      });
+      setShowAddForm(false);
+
+      toast({
+        title: "Success",
+        description: "Stock item added successfully!",
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        toast({
+          title: "Validation Error",
+          description: error.errors[0].message,
+          variant: "destructive",
+        });
+      }
     }
-
-    const newStockItem: StockItem = {
-      id: Date.now().toString(),
-      itemName: addItemForm.itemName,
-      totalQuantity: parseInt(addItemForm.totalQuantity),
-      availableQuantity: parseInt(addItemForm.totalQuantity),
-      location: addItemForm.location,
-      courseTag: addItemForm.courseTag || undefined,
-      purchasePrice: parseFloat(addItemForm.purchasePrice),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    const updatedItems = [...stockItems, newStockItem];
-    setStockItems(updatedItems);
-    saveStockItems(updatedItems);
-
-    setAddItemForm({
-      itemName: '',
-      totalQuantity: '',
-      location: '',
-      courseTag: '',
-      purchasePrice: '',
-    });
-    setShowAddForm(false);
-
-    toast({
-      title: "Success",
-      description: "Stock item added successfully!",
-    });
   };
 
   const handleTransaction = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!selectedItem || !transactionForm.quantity || !transactionForm.reason || !transactionForm.performedBy) {
+    if (!selectedItem) {
       toast({
         title: "Error",
-        description: "Please fill in all fields.",
+        description: "Please select a stock item.",
         variant: "destructive",
       });
       return;
     }
 
-    const quantity = parseInt(transactionForm.quantity);
-    const isStockOut = transactionForm.type === 'out';
+    try {
+      const validated = stockTransactionSchema.parse({
+        quantity: parseInt(transactionForm.quantity) || 0,
+        notes: transactionForm.reason,
+      });
+
+      if (!transactionForm.performedBy) {
+        toast({
+          title: "Error",
+          description: "Please enter who performed the transaction.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const quantity = validated.quantity;
+      const isStockOut = transactionForm.type === 'out';
     
-    if (isStockOut && quantity > selectedItem.availableQuantity) {
-      toast({
-        title: "Error",
-        description: "Cannot take out more items than available in stock.",
-        variant: "destructive",
+      if (isStockOut && quantity > selectedItem.availableQuantity) {
+        toast({
+          title: "Error",
+          description: "Cannot take out more items than available in stock.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const newTransaction: StockTransaction = {
+        id: Date.now().toString(),
+        stockItemId: selectedItem.id,
+        type: transactionForm.type,
+        quantity,
+        reason: transactionForm.reason,
+        performedBy: transactionForm.performedBy,
+        date: new Date(),
+      };
+
+      const updatedTransactions = [...transactions, newTransaction];
+      setTransactions(updatedTransactions);
+      saveStockTransactions(updatedTransactions);
+
+      const updatedStockItems = stockItems.map(item => 
+        item.id === selectedItem.id
+          ? {
+              ...item,
+              availableQuantity: isStockOut 
+                ? item.availableQuantity - quantity 
+                : item.availableQuantity + quantity,
+              totalQuantity: transactionForm.type === 'in' 
+                ? item.totalQuantity + quantity 
+                : item.totalQuantity,
+              updatedAt: new Date(),
+            }
+          : item
+      );
+
+      setStockItems(updatedStockItems);
+      saveStockItems(updatedStockItems);
+
+      setTransactionForm({
+        type: 'in',
+        quantity: '',
+        reason: '',
+        performedBy: '',
       });
-      return;
+      setSelectedItem(null);
+
+      toast({
+        title: "Transaction Completed",
+        description: `Stock ${transactionForm.type === 'in' ? 'added' : 'removed'} successfully.`,
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        toast({
+          title: "Validation Error",
+          description: error.errors[0].message,
+          variant: "destructive",
+        });
+      }
     }
-
-    const newTransaction: StockTransaction = {
-      id: Date.now().toString(),
-      stockItemId: selectedItem.id,
-      type: transactionForm.type,
-      quantity,
-      reason: transactionForm.reason,
-      performedBy: transactionForm.performedBy,
-      date: new Date(),
-    };
-
-    const updatedTransactions = [...transactions, newTransaction];
-    setTransactions(updatedTransactions);
-    saveStockTransactions(updatedTransactions);
-
-    const updatedStockItems = stockItems.map(item => 
-      item.id === selectedItem.id
-        ? {
-            ...item,
-            availableQuantity: isStockOut 
-              ? item.availableQuantity - quantity 
-              : item.availableQuantity + quantity,
-            totalQuantity: transactionForm.type === 'in' 
-              ? item.totalQuantity + quantity 
-              : item.totalQuantity,
-            updatedAt: new Date(),
-          }
-        : item
-    );
-
-    setStockItems(updatedStockItems);
-    saveStockItems(updatedStockItems);
-
-    setTransactionForm({
-      type: 'in',
-      quantity: '',
-      reason: '',
-      performedBy: '',
-    });
-    setSelectedItem(null);
-
-    toast({
-      title: "Transaction Completed",
-      description: `Stock ${transactionForm.type === 'in' ? 'added' : 'removed'} successfully.`,
-    });
   };
 
   const getStockStatus = (item: StockItem) => {
