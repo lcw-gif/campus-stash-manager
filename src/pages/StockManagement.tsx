@@ -7,17 +7,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { StockItem, StockTransaction } from '@/types/stock';
-import { loadStockItems, saveStockItems, loadStockTransactions, saveStockTransactions } from '@/lib/storage';
 import { Package, Plus, Minus, MapPin, Download, Upload, CheckCircle, Edit } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { stockItemSchema, stockTransactionSchema } from '@/lib/validationSchemas';
 import { z } from 'zod';
 import { exportToCsv, exportToJson, parseCSV, convertCsvToStockItems, readFileAsText } from '@/lib/fileUtils';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function StockManagement() {
   const [stockItems, setStockItems] = useState<StockItem[]>([]);
   const [transactions, setTransactions] = useState<StockTransaction[]>([]);
   const [selectedItem, setSelectedItem] = useState<StockItem | null>(null);
+  const [loading, setLoading] = useState(true);
   const [transactionForm, setTransactionForm] = useState({
     type: 'in' as 'in' | 'out',
     quantity: '',
@@ -35,14 +36,68 @@ export default function StockManagement() {
   const { toast } = useToast();
 
   useEffect(() => {
-    setStockItems(loadStockItems());
-    setTransactions(loadStockTransactions());
+    loadData();
   }, []);
 
-  const handleAddNewItem = (e: React.FormEvent) => {
+  const loadData = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: items } = await supabase
+        .from('stock_items')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      const { data: trans } = await supabase
+        .from('stock_transactions')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('timestamp', { ascending: false });
+
+      setStockItems(items?.map(item => ({
+        id: item.id,
+        itemName: item.item_name,
+        totalQuantity: item.quantity,
+        availableQuantity: item.quantity,
+        location: item.location || '',
+        courseTag: item.course_tag || '',
+        purchasePrice: Number(item.purchase_price) || 0,
+        createdAt: new Date(item.created_at),
+        updatedAt: new Date(item.updated_at),
+      })) || []);
+
+      setTransactions(trans?.map(t => ({
+        id: t.id,
+        stockItemId: t.item_id,
+        type: t.type as 'in' | 'out',
+        quantity: t.quantity,
+        reason: t.reason,
+        performedBy: t.performed_by,
+        date: new Date(t.timestamp),
+      })) || []);
+    } catch (error) {
+      console.error('Error loading data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddNewItem = async (e: React.FormEvent) => {
     e.preventDefault();
     
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast({
+          title: "Error",
+          description: "You must be logged in to add items",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const validated = stockItemSchema.parse({
         itemName: addItemForm.itemName,
         totalQuantity: parseInt(addItemForm.totalQuantity) || 0,
@@ -51,21 +106,34 @@ export default function StockManagement() {
         purchasePrice: parseFloat(addItemForm.purchasePrice) || 0,
       });
 
+      const { data, error } = await supabase
+        .from('stock_items')
+        .insert({
+          user_id: user.id,
+          item_name: validated.itemName,
+          quantity: validated.totalQuantity,
+          location: validated.location,
+          course_tag: validated.courseTag,
+          purchase_price: validated.purchasePrice,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
       const newStockItem: StockItem = {
-        id: Date.now().toString(),
-        itemName: validated.itemName,
-        totalQuantity: validated.totalQuantity,
-        availableQuantity: validated.totalQuantity,
-        location: validated.location,
-        courseTag: validated.courseTag,
-        purchasePrice: validated.purchasePrice,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        id: data.id,
+        itemName: data.item_name,
+        totalQuantity: data.quantity,
+        availableQuantity: data.quantity,
+        location: data.location || '',
+        courseTag: data.course_tag || '',
+        purchasePrice: Number(data.purchase_price) || 0,
+        createdAt: new Date(data.created_at),
+        updatedAt: new Date(data.updated_at),
       };
 
-      const updatedItems = [...stockItems, newStockItem];
-      setStockItems(updatedItems);
-      saveStockItems(updatedItems);
+      setStockItems([newStockItem, ...stockItems]);
 
       setAddItemForm({
         itemName: '',
@@ -87,11 +155,17 @@ export default function StockManagement() {
           description: error.errors[0].message,
           variant: "destructive",
         });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to add stock item",
+          variant: "destructive",
+        });
       }
     }
   };
 
-  const handleTransaction = (e: React.FormEvent) => {
+  const handleTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!selectedItem) {
@@ -104,6 +178,16 @@ export default function StockManagement() {
     }
 
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast({
+          title: "Error",
+          description: "You must be logged in",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const validated = stockTransactionSchema.parse({
         quantity: parseInt(transactionForm.quantity) || 0,
         notes: transactionForm.reason,
@@ -130,27 +214,50 @@ export default function StockManagement() {
         return;
       }
 
+      const newQuantity = isStockOut 
+        ? selectedItem.availableQuantity - quantity 
+        : selectedItem.availableQuantity + quantity;
+
+      const { error: updateError } = await supabase
+        .from('stock_items')
+        .update({ quantity: newQuantity })
+        .eq('id', selectedItem.id);
+
+      if (updateError) throw updateError;
+
+      const { data: transData, error: transError } = await supabase
+        .from('stock_transactions')
+        .insert({
+          user_id: user.id,
+          item_id: selectedItem.id,
+          item_name: selectedItem.itemName,
+          type: transactionForm.type,
+          quantity,
+          reason: transactionForm.reason,
+          performed_by: transactionForm.performedBy,
+        })
+        .select()
+        .single();
+
+      if (transError) throw transError;
+
       const newTransaction: StockTransaction = {
-        id: Date.now().toString(),
-        stockItemId: selectedItem.id,
-        type: transactionForm.type,
-        quantity,
-        reason: transactionForm.reason,
-        performedBy: transactionForm.performedBy,
-        date: new Date(),
+        id: transData.id,
+        stockItemId: transData.item_id,
+        type: transData.type as 'in' | 'out',
+        quantity: transData.quantity,
+        reason: transData.reason,
+        performedBy: transData.performed_by,
+        date: new Date(transData.timestamp),
       };
 
-      const updatedTransactions = [...transactions, newTransaction];
-      setTransactions(updatedTransactions);
-      saveStockTransactions(updatedTransactions);
+      setTransactions([newTransaction, ...transactions]);
 
       const updatedStockItems = stockItems.map(item => 
         item.id === selectedItem.id
           ? {
               ...item,
-              availableQuantity: isStockOut 
-                ? item.availableQuantity - quantity 
-                : item.availableQuantity + quantity,
+              availableQuantity: newQuantity,
               totalQuantity: transactionForm.type === 'in' 
                 ? item.totalQuantity + quantity 
                 : item.totalQuantity,
@@ -160,7 +267,6 @@ export default function StockManagement() {
       );
 
       setStockItems(updatedStockItems);
-      saveStockItems(updatedStockItems);
 
       setTransactionForm({
         type: 'in',
@@ -179,6 +285,12 @@ export default function StockManagement() {
         toast({
           title: "Validation Error",
           description: error.errors[0].message,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to process transaction",
           variant: "destructive",
         });
       }
@@ -282,7 +394,11 @@ export default function StockManagement() {
           <CardDescription>Current stock levels and item details</CardDescription>
         </CardHeader>
         <CardContent>
-          {stockItems.length === 0 ? (
+          {loading ? (
+            <div className="text-center py-8">
+              <p className="text-muted-foreground">Loading stock items...</p>
+            </div>
+          ) : stockItems.length === 0 ? (
             <div className="text-center py-8">
               <Package className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
               <p className="text-muted-foreground">

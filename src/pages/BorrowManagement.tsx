@@ -15,14 +15,15 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { BorrowRecord, StockItem, BorrowStatus } from '@/types/stock';
-import { loadBorrowRecords, saveBorrowRecords, loadStockItems, saveStockItems } from '@/lib/storage';
 import { BarcodeScanner } from '@/components/BarcodeScanner';
+import { supabase } from '@/integrations/supabase/client';
 import { borrowRecordSchema } from '@/lib/validationSchemas';
 import { z } from 'zod';
 
 export default function BorrowManagement() {
   const [borrowRecords, setBorrowRecords] = useState<BorrowRecord[]>([]);
   const [stockItems, setStockItems] = useState<StockItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isReturnDialogOpen, setIsReturnDialogOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<BorrowRecord | null>(null);
@@ -43,11 +44,60 @@ export default function BorrowManagement() {
   });
 
   useEffect(() => {
-    setBorrowRecords(loadBorrowRecords());
-    setStockItems(loadStockItems());
+    loadData();
   }, []);
 
-  const handleAddBorrow = () => {
+  const loadData = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: records } = await supabase
+        .from('borrow_records')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('borrow_date', { ascending: false });
+
+      const { data: items } = await supabase
+        .from('stock_items')
+        .select('*')
+        .eq('user_id', user.id);
+
+      setBorrowRecords(records?.map(r => ({
+        id: r.id,
+        stockItemId: r.item_id,
+        itemName: r.item_name,
+        borrowerName: r.borrower_name,
+        borrowerContact: r.borrower_contact,
+        quantity: r.quantity_borrowed,
+        borrowDate: new Date(r.borrow_date),
+        expectedReturnDate: r.expected_return_date ? new Date(r.expected_return_date) : undefined,
+        actualReturnDate: r.actual_return_date ? new Date(r.actual_return_date) : undefined,
+        status: r.status as BorrowStatus,
+        notes: r.notes || '',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })) || []);
+
+      setStockItems(items?.map(item => ({
+        id: item.id,
+        itemName: item.item_name,
+        totalQuantity: item.quantity,
+        availableQuantity: item.quantity,
+        location: item.location || '',
+        courseTag: item.course_tag || '',
+        purchasePrice: Number(item.purchase_price) || 0,
+        createdAt: new Date(item.created_at),
+        updatedAt: new Date(item.updated_at),
+      })) || []);
+    } catch (error) {
+      console.error('Error loading data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddBorrow = async () => {
     const selectedStockItem = stockItems.find(item => item.id === formData.stockItemId);
     if (!selectedStockItem) {
       toast({
@@ -59,6 +109,16 @@ export default function BorrowManagement() {
     }
 
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast({
+          title: "Error",
+          description: "You must be logged in",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const validated = borrowRecordSchema.parse({
         borrowerName: formData.borrowerName,
         borrowerContact: formData.borrowerContact,
@@ -75,33 +135,55 @@ export default function BorrowManagement() {
         return;
       }
 
+      const { data, error } = await supabase
+        .from('borrow_records')
+        .insert({
+          user_id: user.id,
+          item_id: formData.stockItemId,
+          item_name: selectedStockItem.itemName,
+          borrower_name: validated.borrowerName,
+          borrower_contact: validated.borrowerContact || '',
+          quantity_borrowed: validated.quantity,
+          borrow_date: formData.borrowDate.toISOString(),
+          expected_return_date: formData.expectedReturnDate?.toISOString(),
+          status: 'borrowed',
+          notes: validated.notes || '',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
       const newBorrowRecord: BorrowRecord = {
-        id: `borrow-${Date.now()}`,
-        stockItemId: formData.stockItemId,
-        itemName: selectedStockItem.itemName,
-        borrowerName: validated.borrowerName,
-        borrowerContact: validated.borrowerContact || '',
-        quantity: validated.quantity,
-        borrowDate: formData.borrowDate,
-        expectedReturnDate: formData.expectedReturnDate,
-        status: 'borrowed',
-        notes: validated.notes || '',
+        id: data.id,
+        stockItemId: data.item_id,
+        itemName: data.item_name,
+        borrowerName: data.borrower_name,
+        borrowerContact: data.borrower_contact,
+        quantity: data.quantity_borrowed,
+        borrowDate: new Date(data.borrow_date),
+        expectedReturnDate: data.expected_return_date ? new Date(data.expected_return_date) : undefined,
+        status: data.status as BorrowStatus,
+        notes: data.notes || '',
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
-      const updatedRecords = [...borrowRecords, newBorrowRecord];
-      setBorrowRecords(updatedRecords);
-      saveBorrowRecords(updatedRecords);
+      setBorrowRecords([newBorrowRecord, ...borrowRecords]);
 
       // Update stock item available quantity
+      const newQuantity = selectedStockItem.availableQuantity - validated.quantity;
+      await supabase
+        .from('stock_items')
+        .update({ quantity: newQuantity })
+        .eq('id', formData.stockItemId);
+
       const updatedStockItems = stockItems.map(item =>
         item.id === formData.stockItemId
-          ? { ...item, availableQuantity: item.availableQuantity - validated.quantity, updatedAt: new Date() }
+          ? { ...item, availableQuantity: newQuantity, updatedAt: new Date() }
           : item
       );
       setStockItems(updatedStockItems);
-      saveStockItems(updatedStockItems);
 
       toast({
         title: "Success",
@@ -130,38 +212,63 @@ export default function BorrowManagement() {
     }
   };
 
-  const handleReturnItem = () => {
+  const handleReturnItem = async () => {
     if (!selectedRecord) return;
 
-    const updatedRecords = borrowRecords.map(record =>
-      record.id === selectedRecord.id
-        ? { 
-            ...record, 
-            status: 'returned' as BorrowStatus,
-            actualReturnDate: new Date(),
-            updatedAt: new Date()
-          }
-        : record
-    );
-    setBorrowRecords(updatedRecords);
-    saveBorrowRecords(updatedRecords);
+    try {
+      const { error } = await supabase
+        .from('borrow_records')
+        .update({ 
+          status: 'returned',
+          actual_return_date: new Date().toISOString()
+        })
+        .eq('id', selectedRecord.id);
 
-    // Update stock item available quantity
-    const updatedStockItems = stockItems.map(item =>
-      item.id === selectedRecord.stockItemId
-        ? { ...item, availableQuantity: item.availableQuantity + selectedRecord.quantity, updatedAt: new Date() }
-        : item
-    );
-    setStockItems(updatedStockItems);
-    saveStockItems(updatedStockItems);
+      if (error) throw error;
 
-    toast({
-      title: "Success",
-      description: "Item returned successfully",
-    });
+      const updatedRecords = borrowRecords.map(record =>
+        record.id === selectedRecord.id
+          ? { 
+              ...record, 
+              status: 'returned' as BorrowStatus,
+              actualReturnDate: new Date(),
+              updatedAt: new Date()
+            }
+          : record
+      );
+      setBorrowRecords(updatedRecords);
 
-    setIsReturnDialogOpen(false);
-    setSelectedRecord(null);
+      // Update stock item available quantity
+      const stockItem = stockItems.find(item => item.id === selectedRecord.stockItemId);
+      if (stockItem) {
+        const newQuantity = stockItem.availableQuantity + selectedRecord.quantity;
+        await supabase
+          .from('stock_items')
+          .update({ quantity: newQuantity })
+          .eq('id', selectedRecord.stockItemId);
+
+        const updatedStockItems = stockItems.map(item =>
+          item.id === selectedRecord.stockItemId
+            ? { ...item, availableQuantity: newQuantity, updatedAt: new Date() }
+            : item
+        );
+        setStockItems(updatedStockItems);
+      }
+
+      toast({
+        title: "Success",
+        description: "Item returned successfully",
+      });
+
+      setIsReturnDialogOpen(false);
+      setSelectedRecord(null);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to return item",
+        variant: "destructive",
+      });
+    }
   };
 
   const filteredRecords = borrowRecords.filter(record => {
@@ -419,7 +526,13 @@ export default function BorrowManagement() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredRecords.length === 0 ? (
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                      Loading borrow records...
+                    </TableCell>
+                  </TableRow>
+                ) : filteredRecords.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                       No borrow records found

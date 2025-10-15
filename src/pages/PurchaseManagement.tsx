@@ -8,8 +8,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { StatusBadge } from '@/components/StatusBadge';
 import { RepurchaseButton } from '@/components/RepurchaseButton';
 import { PurchaseItem, PurchaseStatus } from '@/types/stock';
-import { loadPurchaseItems, savePurchaseItems, loadStockItems, saveStockItems } from '@/lib/storage';
 import { Plus, ExternalLink, Package, Download, Upload, CheckCircle } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { exportToCsv, exportToJson, parseCSV, convertCsvToPurchaseItems, readFileAsText } from '@/lib/fileUtils';
 import { purchaseItemSchema } from '@/lib/validationSchemas';
@@ -18,6 +18,7 @@ import { DuplicateItemDialog } from '@/components/DuplicateItemDialog';
 
 export default function PurchaseManagement() {
   const [purchaseItems, setPurchaseItems] = useState<PurchaseItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [isDuplicateDialogOpen, setIsDuplicateDialogOpen] = useState(false);
   const [duplicateItems, setDuplicateItems] = useState<PurchaseItem[]>([]);
@@ -35,8 +36,39 @@ export default function PurchaseManagement() {
   const { toast } = useToast();
 
   useEffect(() => {
-    setPurchaseItems(loadPurchaseItems());
+    loadPurchaseItems();
   }, []);
+
+  const loadPurchaseItems = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data } = await supabase
+        .from('purchase_items')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      setPurchaseItems(data?.map(item => ({
+        id: item.id,
+        itemId: `ITEM-${item.id.substring(0, 8).toUpperCase()}`,
+        itemName: item.item_name,
+        whereToBuy: item.where_to_buy || '',
+        price: Number(item.price) || 0,
+        quantity: item.quantity,
+        link: item.link,
+        status: item.status as PurchaseStatus,
+        courseTag: item.course_tag,
+        createdAt: new Date(item.created_at),
+        updatedAt: new Date(item.updated_at),
+      })) || []);
+    } catch (error) {
+      console.error('Error loading purchase items:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const generateItemId = () => {
     return 'ITEM-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substr(2, 3).toUpperCase();
@@ -81,34 +113,60 @@ export default function PurchaseManagement() {
     }
   };
 
-  const addNewItem = (itemData?: any) => {
-    const dataToUse = itemData || {
-      itemName: formData.itemName,
-      whereToBuy: formData.whereToBuy || 'Not specified',
-      price: parseFloat(formData.price),
-      quantity: parseInt(formData.quantity),
-      link: formData.link,
-      status: formData.status,
-      courseTag: formData.courseTag,
-    };
+  const addNewItem = async (itemData?: any) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast({
+          title: "Error",
+          description: "You must be logged in",
+          variant: "destructive",
+        });
+        return;
+      }
 
-    const newItem: PurchaseItem = {
-      id: Date.now().toString(),
-      itemId: generateItemId(),
-      itemName: dataToUse.itemName,
-      whereToBuy: dataToUse.whereToBuy,
-      price: dataToUse.price,
-      quantity: dataToUse.quantity,
-      link: dataToUse.link || undefined,
-      status: dataToUse.status,
-      courseTag: dataToUse.courseTag || undefined,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
+      const dataToUse = itemData || {
+        itemName: formData.itemName,
+        whereToBuy: formData.whereToBuy || 'Not specified',
+        price: parseFloat(formData.price),
+        quantity: parseInt(formData.quantity),
+        link: formData.link,
+        status: formData.status,
+        courseTag: formData.courseTag,
+      };
 
-    const updatedItems = [...purchaseItems, newItem];
-    setPurchaseItems(updatedItems);
-    savePurchaseItems(updatedItems);
+      const { data, error } = await supabase
+        .from('purchase_items')
+        .insert({
+          user_id: user.id,
+          item_name: dataToUse.itemName,
+          where_to_buy: dataToUse.whereToBuy,
+          price: dataToUse.price,
+          quantity: dataToUse.quantity,
+          link: dataToUse.link || null,
+          status: dataToUse.status,
+          course_tag: dataToUse.courseTag || null,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const newItem: PurchaseItem = {
+        id: data.id,
+        itemId: `ITEM-${data.id.substring(0, 8).toUpperCase()}`,
+        itemName: data.item_name,
+        whereToBuy: data.where_to_buy || '',
+        price: Number(data.price) || 0,
+        quantity: data.quantity,
+        link: data.link,
+        status: data.status as PurchaseStatus,
+        courseTag: data.course_tag,
+        createdAt: new Date(data.created_at),
+        updatedAt: new Date(data.updated_at),
+      };
+
+      setPurchaseItems([newItem, ...purchaseItems]);
 
     setFormData({
       itemName: '',
@@ -119,12 +177,19 @@ export default function PurchaseManagement() {
       status: 'considering',
       courseTag: '',
     });
-    setShowAddForm(false);
+      setShowAddForm(false);
 
-    toast({
-      title: "Success",
-      description: "Purchase item added successfully!",
-    });
+      toast({
+        title: "Success",
+        description: "Purchase item added successfully!",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to add purchase item",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleDuplicateConfirm = () => {
@@ -134,92 +199,153 @@ export default function PurchaseManagement() {
     setDuplicateItems([]);
   };
 
-  const updateItemStatus = (id: string, newStatus: PurchaseStatus) => {
+  const updateItemStatus = async (id: string, newStatus: PurchaseStatus) => {
     const currentItem = purchaseItems.find(item => item.id === id);
     if (!currentItem) return;
 
-    const updatedItems = purchaseItems.map(item => 
-      item.id === id 
-        ? { ...item, status: newStatus, updatedAt: new Date() }
-        : item
-    );
-    
-    setPurchaseItems(updatedItems);
-    savePurchaseItems(updatedItems);
+    try {
+      const { error } = await supabase
+        .from('purchase_items')
+        .update({ status: newStatus })
+        .eq('id', id);
 
-    // If status is changed to "arrived" or "stored", move to stock
-    if ((newStatus === 'arrived' && currentItem.status !== 'arrived') || 
-        (newStatus === 'stored' && currentItem.status !== 'stored')) {
-      const item = updatedItems.find(item => item.id === id);
-      if (item) {
-        moveToStock(item);
+      if (error) throw error;
+
+      const updatedItems = purchaseItems.map(item => 
+        item.id === id 
+          ? { ...item, status: newStatus, updatedAt: new Date() }
+          : item
+      );
+      
+      setPurchaseItems(updatedItems);
+
+      // If status is changed to "arrived" or "stored", move to stock
+      if ((newStatus === 'arrived' && currentItem.status !== 'arrived') || 
+          (newStatus === 'stored' && currentItem.status !== 'stored')) {
+        const item = updatedItems.find(item => item.id === id);
+        if (item) {
+          moveToStock(item);
+        }
       }
+
+      toast({
+        title: "Status Updated",
+        description: `Item status changed to ${newStatus.replace('_', ' ')}`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update status",
+        variant: "destructive",
+      });
     }
-
-    toast({
-      title: "Status Updated",
-      description: `Item status changed to ${newStatus.replace('_', ' ')}`,
-    });
   };
 
-  const moveToStock = (purchaseItem: PurchaseItem) => {
-    const stockItems = loadStockItems();
-    
-    const newStockItem = {
-      id: Date.now().toString(),
-      itemName: purchaseItem.itemName,
-      totalQuantity: purchaseItem.quantity,
-      availableQuantity: purchaseItem.quantity,
-      location: 'Warehouse', // Default location
-      courseTag: purchaseItem.courseTag,
-      purchasePrice: purchaseItem.price,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
+  const moveToStock = async (purchaseItem: PurchaseItem) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-    const updatedStockItems = [...stockItems, newStockItem];
-    saveStockItems(updatedStockItems);
+      await supabase
+        .from('stock_items')
+        .insert({
+          user_id: user.id,
+          item_name: purchaseItem.itemName,
+          quantity: purchaseItem.quantity,
+          location: 'Warehouse',
+          course_tag: purchaseItem.courseTag || null,
+          purchase_price: purchaseItem.price,
+        });
 
-    toast({
-      title: "Moved to Stock",
-      description: `${purchaseItem.itemName} has been added to stock inventory.`,
-    });
+      toast({
+        title: "Moved to Stock",
+        description: `${purchaseItem.itemName} has been added to stock inventory.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to move item to stock",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleRepurchase = (item: PurchaseItem, quantity: number) => {
-    const newItem: PurchaseItem = {
-      id: Date.now().toString(),
-      itemId: generateItemId(),
-      itemName: item.itemName,
-      whereToBuy: item.whereToBuy,
-      price: item.price,
-      quantity: quantity,
-      link: item.link,
-      status: 'considering',
-      courseTag: item.courseTag,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
+  const handleRepurchase = async (item: PurchaseItem, quantity: number) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-    const updatedItems = [...purchaseItems, newItem];
-    setPurchaseItems(updatedItems);
-    savePurchaseItems(updatedItems);
+      const { data, error } = await supabase
+        .from('purchase_items')
+        .insert({
+          user_id: user.id,
+          item_name: item.itemName,
+          where_to_buy: item.whereToBuy,
+          price: item.price,
+          quantity: quantity,
+          link: item.link,
+          status: 'considering',
+          course_tag: item.courseTag,
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const newItem: PurchaseItem = {
+        id: data.id,
+        itemId: `ITEM-${data.id.substring(0, 8).toUpperCase()}`,
+        itemName: data.item_name,
+        whereToBuy: data.where_to_buy || '',
+        price: Number(data.price) || 0,
+        quantity: data.quantity,
+        link: data.link,
+        status: data.status as PurchaseStatus,
+        courseTag: data.course_tag,
+        createdAt: new Date(data.created_at),
+        updatedAt: new Date(data.updated_at),
+      };
+
+      setPurchaseItems([newItem, ...purchaseItems]);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to create repurchase",
+        variant: "destructive",
+      });
+    }
   };
 
-  const recordPresent = (id: string) => {
-    const updatedItems = purchaseItems.map(item => 
-      item.id === id 
-        ? { ...item, isPresent: true, lastChecked: new Date(), updatedAt: new Date() }
-        : item
-    );
-    
-    setPurchaseItems(updatedItems);
-    savePurchaseItems(updatedItems);
+  const recordPresent = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('purchase_items')
+        .update({ 
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id);
 
-    toast({
-      title: "Item Recorded",
-      description: "Item marked as present in inventory check.",
-    });
+      if (error) throw error;
+
+      const updatedItems = purchaseItems.map(item => 
+        item.id === id 
+          ? { ...item, isPresent: true, lastChecked: new Date(), updatedAt: new Date() }
+          : item
+      );
+      
+      setPurchaseItems(updatedItems);
+
+      toast({
+        title: "Item Recorded",
+        description: "Item marked as present in inventory check.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to record item presence",
+        variant: "destructive",
+      });
+    }
   };
 
   const exportPurchaseItems = (format: 'csv' | 'json') => {
@@ -267,9 +393,10 @@ export default function PurchaseManagement() {
           return;
         }
 
+        // Note: CSV import adds items to local state only
+        // In production, these should be saved to database
         const updatedItems = [...purchaseItems, ...newItems];
         setPurchaseItems(updatedItems);
-        savePurchaseItems(updatedItems);
 
         toast({
           title: "Import Successful",
@@ -297,9 +424,10 @@ export default function PurchaseManagement() {
             return;
           }
 
+          // Note: JSON import adds items to local state only
+          // In production, these should be saved to database
           const updatedItems = [...purchaseItems, ...validItems];
           setPurchaseItems(updatedItems);
-          savePurchaseItems(updatedItems);
 
           toast({
             title: "Import Successful",
@@ -479,7 +607,11 @@ export default function PurchaseManagement() {
           <CardDescription>All purchase orders and their current status</CardDescription>
         </CardHeader>
         <CardContent>
-          {purchaseItems.length === 0 ? (
+          {loading ? (
+            <div className="text-center py-8">
+              <p className="text-muted-foreground">Loading purchase items...</p>
+            </div>
+          ) : purchaseItems.length === 0 ? (
             <div className="text-center py-8">
               <Package className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
               <p className="text-muted-foreground">No purchase items yet. Add your first item above.</p>

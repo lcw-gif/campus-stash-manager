@@ -14,6 +14,59 @@ export type Database = {
   }
   public: {
     Tables: {
+      borrow_records: {
+        Row: {
+          actual_return_date: string | null
+          borrow_date: string
+          borrower_contact: string
+          borrower_name: string
+          expected_return_date: string | null
+          id: string
+          item_id: string
+          item_name: string
+          notes: string | null
+          quantity_borrowed: number
+          status: string
+          user_id: string
+        }
+        Insert: {
+          actual_return_date?: string | null
+          borrow_date?: string
+          borrower_contact: string
+          borrower_name: string
+          expected_return_date?: string | null
+          id?: string
+          item_id: string
+          item_name: string
+          notes?: string | null
+          quantity_borrowed: number
+          status?: string
+          user_id: string
+        }
+        Update: {
+          actual_return_date?: string | null
+          borrow_date?: string
+          borrower_contact?: string
+          borrower_name?: string
+          expected_return_date?: string | null
+          id?: string
+          item_id?: string
+          item_name?: string
+          notes?: string | null
+          quantity_borrowed?: number
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "borrow_records_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "stock_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       course_items: {
         Row: {
           course_id: string
@@ -117,6 +170,128 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      purchase_items: {
+        Row: {
+          course_tag: string | null
+          created_at: string
+          id: string
+          item_name: string
+          link: string | null
+          price: number | null
+          quantity: number
+          status: string
+          updated_at: string
+          user_id: string
+          where_to_buy: string | null
+        }
+        Insert: {
+          course_tag?: string | null
+          created_at?: string
+          id?: string
+          item_name: string
+          link?: string | null
+          price?: number | null
+          quantity?: number
+          status?: string
+          updated_at?: string
+          user_id: string
+          where_to_buy?: string | null
+        }
+        Update: {
+          course_tag?: string | null
+          created_at?: string
+          id?: string
+          item_name?: string
+          link?: string | null
+          price?: number | null
+          quantity?: number
+          status?: string
+          updated_at?: string
+          user_id?: string
+          where_to_buy?: string | null
+        }
+        Relationships: []
+      }
+      stock_items: {
+        Row: {
+          course_tag: string | null
+          created_at: string
+          id: string
+          item_name: string
+          location: string | null
+          purchase_price: number | null
+          quantity: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          course_tag?: string | null
+          created_at?: string
+          id?: string
+          item_name: string
+          location?: string | null
+          purchase_price?: number | null
+          quantity?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          course_tag?: string | null
+          created_at?: string
+          id?: string
+          item_name?: string
+          location?: string | null
+          purchase_price?: number | null
+          quantity?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      stock_transactions: {
+        Row: {
+          id: string
+          item_id: string
+          item_name: string
+          performed_by: string
+          quantity: number
+          reason: string
+          timestamp: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          item_id: string
+          item_name: string
+          performed_by: string
+          quantity: number
+          reason: string
+          timestamp?: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          item_id?: string
+          item_name?: string
+          performed_by?: string
+          quantity?: number
+          reason?: string
+          timestamp?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_transactions_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "stock_items"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
