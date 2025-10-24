@@ -9,6 +9,31 @@ import { loadPurchaseItems, loadStockItems } from '@/lib/storage';
 import { Search, Package, ShoppingCart } from 'lucide-react';
 import { StatusBadge } from '@/components/StatusBadge';
 
+// Helper function to escape regex special characters
+const escapeRegex = (str: string): string => {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
+
+// Safe text highlighting component
+const HighlightText = ({ text, query }: { text: string; query: string }) => {
+  if (!query) return <>{text}</>;
+  
+  const escapedQuery = escapeRegex(query);
+  const parts = text.split(new RegExp(`(${escapedQuery})`, 'gi'));
+  
+  return (
+    <>
+      {parts.map((part, i) => 
+        part.toLowerCase() === query.toLowerCase() ? (
+          <mark key={i} className="bg-yellow-200 px-1 rounded">{part}</mark>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </>
+  );
+};
+
 export default function SearchPage() {
   const [purchaseItems, setPurchaseItems] = useState<PurchaseItem[]>([]);
   const [stockItems, setStockItems] = useState<StockItem[]>([]);
@@ -125,18 +150,7 @@ export default function SearchPage() {
                     {filteredPurchaseItems.map((item) => (
                       <TableRow key={item.id}>
                         <TableCell className="font-medium">
-                          {searchQuery && item.itemName.toLowerCase().includes(searchQuery.toLowerCase()) ? (
-                            <span 
-                              dangerouslySetInnerHTML={{
-                                __html: item.itemName.replace(
-                                  new RegExp(`(${searchQuery})`, 'gi'),
-                                  '<mark class="bg-yellow-200 px-1 rounded">$1</mark>'
-                                )
-                              }}
-                            />
-                          ) : (
-                            item.itemName
-                          )}
+                          <HighlightText text={item.itemName} query={searchQuery} />
                         </TableCell>
                         <TableCell>{item.whereToBuy}</TableCell>
                         <TableCell>${item.price.toFixed(2)}</TableCell>
@@ -144,14 +158,7 @@ export default function SearchPage() {
                         <TableCell>
                           {item.courseTag ? (
                             searchQuery && item.courseTag.toLowerCase().includes(searchQuery.toLowerCase()) ? (
-                              <span 
-                                dangerouslySetInnerHTML={{
-                                  __html: item.courseTag.replace(
-                                    new RegExp(`(${searchQuery})`, 'gi'),
-                                    '<mark class="bg-yellow-200 px-1 rounded">$1</mark>'
-                                  )
-                                }}
-                              />
+                              <HighlightText text={item.courseTag} query={searchQuery} />
                             ) : (
                               <Badge variant="outline">{item.courseTag}</Badge>
                             )
@@ -206,46 +213,17 @@ export default function SearchPage() {
                     {filteredStockItems.map((item) => (
                       <TableRow key={item.id}>
                         <TableCell className="font-medium">
-                          {searchQuery && item.itemName.toLowerCase().includes(searchQuery.toLowerCase()) ? (
-                            <span 
-                              dangerouslySetInnerHTML={{
-                                __html: item.itemName.replace(
-                                  new RegExp(`(${searchQuery})`, 'gi'),
-                                  '<mark class="bg-yellow-200 px-1 rounded">$1</mark>'
-                                )
-                              }}
-                            />
-                          ) : (
-                            item.itemName
-                          )}
+                          <HighlightText text={item.itemName} query={searchQuery} />
                         </TableCell>
                         <TableCell className="font-bold">{item.availableQuantity}</TableCell>
                         <TableCell>{item.totalQuantity}</TableCell>
                         <TableCell>
-                          {searchQuery && item.location.toLowerCase().includes(searchQuery.toLowerCase()) ? (
-                            <span 
-                              dangerouslySetInnerHTML={{
-                                __html: item.location.replace(
-                                  new RegExp(`(${searchQuery})`, 'gi'),
-                                  '<mark class="bg-yellow-200 px-1 rounded">$1</mark>'
-                                )
-                              }}
-                            />
-                          ) : (
-                            item.location
-                          )}
+                          <HighlightText text={item.location} query={searchQuery} />
                         </TableCell>
                         <TableCell>
                           {item.courseTag ? (
                             searchQuery && item.courseTag.toLowerCase().includes(searchQuery.toLowerCase()) ? (
-                              <span 
-                                dangerouslySetInnerHTML={{
-                                  __html: item.courseTag.replace(
-                                    new RegExp(`(${searchQuery})`, 'gi'),
-                                    '<mark class="bg-yellow-200 px-1 rounded">$1</mark>'
-                                  )
-                                }}
-                              />
+                              <HighlightText text={item.courseTag} query={searchQuery} />
                             ) : (
                               <Badge variant="outline">{item.courseTag}</Badge>
                             )
